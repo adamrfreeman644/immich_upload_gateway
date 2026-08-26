@@ -1,0 +1,16 @@
+services:
+  immich-upload-gateway:
+    build: .
+    container_name: immich-upload-gateway
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+    environment:
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      SESSION_SECRET: "${SESSION_SECRET}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      MAX_FILE_MB: "${MAX_FILE_MB:-5000}"
+    volumes:
+      - "${CONFIG_HOST_PATH:-./config}:/config"
+      - "${WORK_FALLBACK_HOST_PATH:-./fallback/work}:/fallback/work"
+      - "${PERSONAL_FALLBACK_HOST_PATH:-./fallback/personal}:/fallback/personal"
