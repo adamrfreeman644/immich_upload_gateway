@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import time
+from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -17,7 +18,14 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import app as legacy
 
+VERSION_FILE = Path(__file__).with_name("VERSION")
+try:
+    legacy.VERSION = VERSION_FILE.read_text(encoding="utf-8").strip() or legacy.VERSION
+except OSError:
+    pass
+
 app = legacy.app
+app.version = legacy.VERSION
 log = logging.getLogger("gateway-auth")
 INTEGRATION_VERSION = "shared-auth-1"
 
@@ -55,8 +63,8 @@ def issuer_host() -> str:
         return OIDC_ISSUER
 
 
-# Authlib stores only the short-lived OIDC transaction state in this signed,
-# HttpOnly cookie. Access/refresh/ID tokens are never persisted by the app.
+# Authlib stores only the short-lived OIDC state/nonce transaction in this
+# signed HttpOnly cookie. Access, refresh and ID tokens are never persisted.
 app.add_middleware(
     SessionMiddleware,
     secret_key=legacy.SESSION_SECRET,
@@ -108,9 +116,6 @@ _original_admin_page = legacy.admin_page
 
 def admin_page_with_auth(c, msg=""):
     page = _original_admin_page(c, msg)
-    # The identity is injected per request by middleware into a small process
-    # local variable? No: use a neutral panel and fill the current user with JS
-    # from the protected status endpoint, keeping secrets out of the HTML.
     panel = f'''<section class="panel full"><h2>Authentication</h2><p><strong>Provider:</strong> Authentik</p><p><strong>Status:</strong> <span id="auth-state">Checking…</span></p><p><strong>OIDC issuer:</strong> {html.escape(issuer_host() or 'Not configured')}</p><p><strong>Signed in as:</strong> <span id="auth-user">Checking…</span></p><p><strong>Integration:</strong> {INTEGRATION_VERSION}</p><script>fetch('/admin/auth/status').then(r=>r.json()).then(j=>{{document.getElementById('auth-state').textContent=j.connected?'Connected':'Configuration error';document.getElementById('auth-user').textContent=j.current_user||'Signed in';}}).catch(()=>{{document.getElementById('auth-state').textContent='Configuration error';}})</script></section>'''
     return page.replace('</div></form>', panel + '</div></form>')
 
@@ -121,13 +126,14 @@ legacy.admin_page = admin_page_with_auth
 @app.middleware("http")
 async def protect_admin_routes(request: Request, call_next):
     path = request.url.path
-    # Explicit public groups: health/info, root, public portal pages and upload
-    # APIs never depend on Authentik and continue working during an IdP outage.
+    # Explicit public group: root, health/info, upload portal pages, upload APIs,
+    # and the OIDC callback/start routes. An Authentik outage therefore cannot
+    # break an otherwise-valid public upload link.
     if not path.startswith("/admin"):
         return await call_next(request)
     if not AUTH_ENABLED:
-        # Upgrade-safe migration mode: retain the existing local admin password
-        # until Authentik has been configured and AUTH_ENABLED is deliberately set.
+        # Upgrade-safe migration mode. Existing local admin auth remains usable
+        # until the owner explicitly enables the tested Authentik integration.
         return await call_next(request)
     if missing_config() or client is None:
         return config_error()
@@ -160,10 +166,12 @@ async def oidc_callback(request: Request):
     if not AUTH_ENABLED or missing_config() or client is None:
         return config_error()
     try:
+        # Authlib validates state and the provider's ID-token signature, issuer,
+        # audience, expiry and nonce during the authorization-code exchange.
         token = await client.authorize_access_token(request)
         user = token.get("userinfo") or {}
         if not user:
-            user = await client.parse_id_token(request, token, nonce=request.session.get("oidc_nonce"))
+            raise ValueError("OIDC user information missing")
         subject = str(user.get("sub", "")).strip()
         if not subject:
             raise ValueError("OIDC subject missing")
