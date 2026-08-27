@@ -19,8 +19,20 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Check Python syntax
         run: python -m compileall -q app.py secure_app.py tests
-      - name: Run public/admin security tests
-        run: pytest -q tests
+      - name: Public upload test
+        run: pytest -q tests/test_auth_boundaries.py::test_valid_public_upload_page_never_requires_authentik
+      - name: Public cannot access admin test
+        run: pytest -q tests/test_auth_boundaries.py::test_public_uploader_cannot_open_admin
+      - name: Portal isolation test
+        run: pytest -q tests/test_auth_boundaries.py::test_public_token_does_not_browse_other_portal
+      - name: Auth outage isolation test
+        run: pytest -q tests/test_auth_boundaries.py::test_admin_auth_misconfiguration_fails_closed_but_public_stays_up
+      - name: Authenticated admin test
+        run: pytest -q tests/test_auth_boundaries.py::test_authenticated_admin_session_succeeds
+      - name: Invalid OIDC rejection test
+        run: pytest -q tests/test_auth_boundaries.py::test_invalid_or_expired_oidc_exchange_is_rejected
+      - name: Health secrecy test
+        run: pytest -q tests/test_auth_boundaries.py::test_health_never_exposes_secrets
       - name: Validate Compose
         env:
           ADMIN_PASSWORD: test-only
