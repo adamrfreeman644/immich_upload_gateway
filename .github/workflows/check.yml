@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   check:
@@ -22,7 +23,20 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q app.py secure_app.py tests
       - name: Public upload test
-        run: pytest -q tests/test_auth_boundaries.py::test_valid_public_upload_page_never_requires_authentik
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          pytest -q tests/test_auth_boundaries.py::test_valid_public_upload_page_never_requires_authentik > /tmp/gateway-test.log 2>&1
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            printf 'Temporary CI diagnostic for public upload test:\n\n```text\n' >/tmp/comment.txt
+            cat /tmp/gateway-test.log >>/tmp/comment.txt
+            printf '\n```\n' >>/tmp/comment.txt
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/comment.txt
+          fi
+          cat /tmp/gateway-test.log
+          exit "$code"
       - name: Public cannot access admin test
         run: pytest -q tests/test_auth_boundaries.py::test_public_uploader_cannot_open_admin
       - name: Portal isolation test
