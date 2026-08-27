@@ -63,8 +63,6 @@ def issuer_host() -> str:
         return OIDC_ISSUER
 
 
-# Authlib stores only the short-lived OIDC state/nonce transaction in this
-# signed HttpOnly cookie. Access, refresh and ID tokens are never persisted.
 app.add_middleware(
     SessionMiddleware,
     secret_key=legacy.SESSION_SECRET,
@@ -95,11 +93,11 @@ def admin_identity(request: Request) -> dict:
         return {}
 
 
-def login_page(error: str = "") -> HTMLResponse:
+def login_page(error: str = "", status_code: int | None = None) -> HTMLResponse:
     err = f'<p class="bad">{html.escape(error)}</p>' if error else ""
     start = "/auth/start"
     body = f'''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>{legacy.ACSS}</style></head><body><main class="shell" style="max-width:470px;padding-top:12vh"><section class="panel"><h1>Gateway administration</h1><p class="muted">Admin sign-in is handled by Authentik. Public upload links do not require login.</p>{err}<button id="oidc" style="width:100%;margin-top:14px">Continue with Authentik</button></section></main><script>document.getElementById('oidc').onclick=()=>{{const w=window.open({json.dumps(start)},'gateway-auth','popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');if(!w)location.href={json.dumps(start)};}};window.addEventListener('message',e=>{{if(e.origin===location.origin&&e.data&&e.data.type==='gateway-auth-complete')location.replace('/admin');}});</script></body></html>'''
-    return HTMLResponse(body, status_code=503 if error else 401)
+    return HTMLResponse(body, status_code=status_code if status_code is not None else 401)
 
 
 def config_error() -> HTMLResponse:
@@ -108,7 +106,7 @@ def config_error() -> HTMLResponse:
     if missing:
         msg += " Missing: " + ", ".join(missing)
     log.error("Gateway OIDC configuration error; protected admin access denied")
-    return login_page(msg)
+    return login_page(msg, status_code=503)
 
 
 _original_admin_page = legacy.admin_page
@@ -126,14 +124,9 @@ legacy.admin_page = admin_page_with_auth
 @app.middleware("http")
 async def protect_admin_routes(request: Request, call_next):
     path = request.url.path
-    # Explicit public group: root, health/info, upload portal pages, upload APIs,
-    # and the OIDC callback/start routes. An Authentik outage therefore cannot
-    # break an otherwise-valid public upload link.
     if not path.startswith("/admin"):
         return await call_next(request)
     if not AUTH_ENABLED:
-        # Upgrade-safe migration mode. Existing local admin auth remains usable
-        # until the owner explicitly enables the tested Authentik integration.
         return await call_next(request)
     if missing_config() or client is None:
         return config_error()
@@ -158,7 +151,7 @@ async def oidc_start(request: Request):
         return await client.authorize_redirect(request, OIDC_REDIRECT_URI, nonce=nonce)
     except Exception as exc:
         log.warning("OIDC authorization start failed: %s", exc.__class__.__name__)
-        return login_page("Could not contact the authentication provider.")
+        return login_page("Could not contact the authentication provider.", status_code=503)
 
 
 @app.get("/auth/callback")
@@ -166,8 +159,6 @@ async def oidc_callback(request: Request):
     if not AUTH_ENABLED or missing_config() or client is None:
         return config_error()
     try:
-        # Authlib validates state and the provider's ID-token signature, issuer,
-        # audience, expiry and nonce during the authorization-code exchange.
         token = await client.authorize_access_token(request)
         user = token.get("userinfo") or {}
         if not user:
@@ -190,7 +181,7 @@ async def oidc_callback(request: Request):
         return response
     except Exception as exc:
         log.warning("OIDC callback failed: %s", exc.__class__.__name__)
-        return login_page("Sign-in failed. Please try again or check Authentik configuration.")
+        return login_page("Sign-in failed. Please try again or check Authentik configuration.", status_code=401)
 
 
 async def oidc_logout(request: Request):
