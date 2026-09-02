@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — Unraid startup safety
+
+- Wait for `/mnt/user` to be a genuine mounted user-share filesystem before the updater touches appdata.
+- Add a flash-based Unraid startup helper that never creates paths under `/mnt/user` during early boot.
+- Add an installer that removes the old unsafe direct `/mnt/user` startup line and installs the safe helper.
+- Fail safely when user shares do not mount instead of creating directories on Unraid's RAM root filesystem.
+
 ## 0.3.0 — Shared authentication architecture
 
 - Keep public upload links account-free and independent of Authentik availability.
