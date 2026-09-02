@@ -9,6 +9,27 @@ RAW_BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.zip"
 
 log(){ printf '[immich-gateway-updater] %s\n' "$*"; }
+
+# If this script is launched from Unraid's boot sequence, do not touch
+# /mnt/user until the user-share filesystem is genuinely mounted. Accessing
+# it early can create ordinary directories on the root filesystem and prevent
+# Unraid's real user-share mount from being established.
+if [[ "$APP_DIR" == /mnt/user/* ]]; then
+  timeout="${UNRAID_USER_SHARE_WAIT_SECONDS:-300}"
+  waited=0
+  while (( waited < timeout )); do
+    if mountpoint -q /mnt/user; then
+      break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  if ! mountpoint -q /mnt/user; then
+    log "/mnt/user did not become a mountpoint within ${timeout}s; updater will not run."
+    exit 0
+  fi
+fi
+
 [[ -d "$APP_DIR" ]] || { log "App directory not found: $APP_DIR"; exit 1; }
 
 current="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo 0.0.0)"
