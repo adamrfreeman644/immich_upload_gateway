@@ -1,28 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/mnt/user/appdata/immich-upload-gateway}"
+APP_DIR="${APP_DIR:-/appsrc}"
 REPO="${REPO:-adamrfreeman644/immich_upload_gateway}"
 BRANCH="${BRANCH:-main}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8092/health}"
+HEALTH_URL="${HEALTH_URL:-http://immich-upload-gateway:8092/health}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.zip"
 
 log(){ printf '[immich-gateway-updater] %s\n' "$*"; }
 
-# If this script is launched from Unraid's boot sequence, do not touch
-# /mnt/user until the user-share filesystem is genuinely mounted. Accessing
-# it early can create ordinary directories on the root filesystem and prevent
-# Unraid's real user-share mount from being established.
 if [[ "$APP_DIR" == /mnt/user/* ]]; then
   timeout="${UNRAID_USER_SHARE_WAIT_SECONDS:-300}"
   waited=0
   while (( waited < timeout )); do
-    if mountpoint -q /mnt/user; then
-      break
-    fi
-    sleep 2
-    waited=$((waited + 2))
+    if mountpoint -q /mnt/user; then break; fi
+    sleep 2; waited=$((waited + 2))
   done
   if ! mountpoint -q /mnt/user; then
     log "/mnt/user did not become a mountpoint within ${timeout}s; updater will not run."
@@ -45,7 +38,7 @@ cleanup(){ rm -rf "$stage"; }
 trap cleanup EXIT
 mkdir -p "$backup"
 
-managed=(app.py Dockerfile docker-compose.yml requirements.txt VERSION README.md gateway-updater.sh .env.example)
+managed=(app.py Dockerfile Dockerfile.updater docker-compose.yml requirements.txt VERSION README.md CHANGELOG.md gateway-updater.sh updater_service.py .env.example)
 for f in "${managed[@]}"; do
   [[ -f "$APP_DIR/$f" ]] && cp -a "$APP_DIR/$f" "$backup/"
 done
@@ -58,7 +51,7 @@ src="$(find "$stage" -mindepth 1 -maxdepth 1 -type d | head -1)"
 
 archive_version="$(tr -d '[:space:]' < "$src/VERSION")"
 [[ "$archive_version" == "$latest" ]] || { log "Archive version '$archive_version' does not match '$latest'"; exit 1; }
-python3 -m py_compile "$src/app.py"
+python3 -m py_compile "$src/app.py" "$src/updater_service.py"
 
 rollback(){
   log "Update failed; rolling back to $current"
@@ -66,20 +59,22 @@ rollback(){
     if [[ -f "$backup/$f" ]]; then cp -af "$backup/$f" "$APP_DIR/$f"; else rm -f "$APP_DIR/$f"; fi
   done
   cd "$APP_DIR"
-  docker compose build
-  docker compose up -d
+  docker compose build immich-upload-gateway >/dev/null
+  docker compose up -d --no-deps immich-upload-gateway >/dev/null
 }
 
-for f in "${managed[@]}"; do [[ -f "$src/$f" ]] && cp -f "$src/$f" "$APP_DIR/$f"; done
+for f in "${managed[@]}"; do
+  [[ -f "$src/$f" ]] && cp -f "$src/$f" "$APP_DIR/$f"
+done
 chmod +x "$APP_DIR/gateway-updater.sh" 2>/dev/null || true
 cd "$APP_DIR"
 
 if ! docker compose config >/dev/null; then rollback; exit 1; fi
-if ! docker compose build --pull; then rollback; exit 1; fi
-if ! docker compose up -d; then rollback; exit 1; fi
+if ! docker compose build --pull immich-upload-gateway; then rollback; exit 1; fi
+if ! docker compose up -d --no-deps immich-upload-gateway; then rollback; exit 1; fi
 
 healthy=0
-for _ in {1..30}; do
+for _ in {1..45}; do
   if curl -fsS "$HEALTH_URL" 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"'; then healthy=1; break; fi
   sleep 1
 done
@@ -93,3 +88,4 @@ if [[ "$installed" != "$latest" ]]; then
 fi
 
 log "Updated $current -> $latest from GitHub"
+log "Updater sidecar files were refreshed on disk; recreate the updater service only if a future release notes that it changed."
