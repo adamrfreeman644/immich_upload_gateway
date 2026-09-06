@@ -34,6 +34,7 @@ services:
       REPO: "${REPO:-adamrfreeman644/immich_upload_gateway}"
       BRANCH: "${BRANCH:-main}"
       HEALTH_URL: "http://immich-upload-gateway:8092/health"
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME:-immich-upload-gateway}"
     volumes:
       - "${APP_HOST_PATH:-.}:/appsrc"
       - /var/run/docker.sock:/var/run/docker.sock
