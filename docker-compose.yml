@@ -1,10 +1,9 @@
 services:
   immich-upload-gateway:
     build: .
-    container_name: immich-upload-gateway
     restart: unless-stopped
     ports:
-      - "8092:8092"
+      - "${GATEWAY_PORT:-8092}:8092"
     environment:
       AUTH_ENABLED: "${AUTH_ENABLED:-false}"
       OIDC_ISSUER: "${OIDC_ISSUER:-}"
@@ -16,7 +15,25 @@ services:
       SESSION_SECRET: "${SESSION_SECRET:-}"
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
       MAX_FILE_MB: "${MAX_FILE_MB:-5000}"
+      UPDATER_URL: "http://immich-gateway-updater:8093"
     volumes:
       - "${CONFIG_HOST_PATH:-./config}:/config"
       - "${WORK_FALLBACK_HOST_PATH:-./fallback/work}:/fallback/work"
       - "${PERSONAL_FALLBACK_HOST_PATH:-./fallback/personal}:/fallback/personal"
+      - "${PORTAL_FALLBACK_HOST_PATH:-./fallback/portals}:/fallback/portals"
+    depends_on:
+      - immich-gateway-updater
+
+  immich-gateway-updater:
+    build:
+      context: .
+      dockerfile: Dockerfile.updater
+    restart: unless-stopped
+    environment:
+      APP_DIR: /appsrc
+      REPO: "${REPO:-adamrfreeman644/immich_upload_gateway}"
+      BRANCH: "${BRANCH:-main}"
+      HEALTH_URL: "http://immich-upload-gateway:8092/health"
+    volumes:
+      - "${APP_HOST_PATH:-.}:/appsrc"
+      - /var/run/docker.sock:/var/run/docker.sock
