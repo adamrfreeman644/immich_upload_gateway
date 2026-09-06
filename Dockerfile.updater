@@ -1,0 +1,6 @@
+FROM docker:27-cli
+RUN apk add --no-cache bash curl unzip python3 docker-cli-compose
+WORKDIR /appsrc
+COPY updater_service.py /updater_service.py
+EXPOSE 8093
+CMD ["python3","/updater_service.py"]
