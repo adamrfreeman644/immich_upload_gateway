@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 — Collision-free container naming
+
+- Use `immich-gateway` as the short default gateway container name so migration can complete while the legacy `immich-upload-gateway` container still exists.
+
 ## 0.4.2 — Clear uploads and reliable update detection
 
 - Show a progress bar and result for every selected upload.
