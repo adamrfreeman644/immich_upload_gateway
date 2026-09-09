@@ -25,10 +25,11 @@ fi
 
 [[ -d "$APP_DIR" ]] || { log "App directory not found: $APP_DIR"; exit 1; }
 
-current="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo 0.0.0)"
+source_current="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo 0.0.0)"
+running_current="$(curl -fsS "$HEALTH_URL" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version","unknown"))' 2>/dev/null || echo unknown)"
 latest="$(curl -fsSL --connect-timeout 10 --max-time 30 "$RAW_BASE/VERSION" | tr -d '[:space:]')"
 [[ -n "$latest" ]] || { log 'Could not determine latest GitHub version'; exit 1; }
-[[ "$current" == "$latest" ]] && { log "Already current: $current"; exit 0; }
+[[ "$source_current" == "$latest" && "$running_current" == "$latest" ]] && { log "Already current: $latest"; exit 0; }
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 backup="$APP_DIR/backups/$stamp"
@@ -43,7 +44,7 @@ for f in "${managed[@]}"; do
   [[ -f "$APP_DIR/$f" ]] && cp -a "$APP_DIR/$f" "$backup/"
 done
 
-log "Downloading $REPO@$BRANCH ($current -> $latest)"
+log "Downloading $REPO@$BRANCH (running $running_current, source $source_current -> $latest)"
 curl -fsSL --connect-timeout 10 --max-time 120 "$ARCHIVE_URL" -o "$archive"
 unzip -q "$archive" -d "$stage"
 src="$(find "$stage" -mindepth 1 -maxdepth 1 -type d | head -1)"
@@ -54,7 +55,7 @@ archive_version="$(tr -d '[:space:]' < "$src/VERSION")"
 python3 -m py_compile "$src/app.py" "$src/updater_service.py"
 
 rollback(){
-  log "Update failed; rolling back to $current"
+  log "Update failed; rolling back source to $source_current"
   for f in "${managed[@]}"; do
     if [[ -f "$backup/$f" ]]; then cp -af "$backup/$f" "$APP_DIR/$f"; else rm -f "$APP_DIR/$f"; fi
   done
@@ -87,5 +88,6 @@ if [[ "$installed" != "$latest" ]]; then
   exit 1
 fi
 
-log "Updated $current -> $latest from GitHub"
+log "Updated running gateway $running_current -> $latest from GitHub"
 log "Updater sidecar files were refreshed on disk; recreate the updater service only if a future release notes that it changed."
+
