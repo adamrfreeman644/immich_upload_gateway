@@ -1,4 +1,5 @@
 import importlib
+import errno
 import json
 import sys
 
@@ -50,6 +51,26 @@ def test_public_upload_page_has_per_file_progress_and_retry(monkeypatch, tmp_pat
     assert "retry.onclick" in response.text
     assert "data.reason||data.detail||data.message" in response.text
     assert "Network error. Check your connection and try again." in response.text
+
+
+def test_fallback_move_handles_cross_device_mount(monkeypatch, tmp_path):
+    legacy, _, _ = load_gateway(monkeypatch, tmp_path, auth_enabled=False)
+    source = tmp_path / "staged.jpg"
+    destination = tmp_path / "fallback" / "photo.jpg"
+    destination.parent.mkdir()
+    source.write_bytes(b"photo")
+    real_replace = legacy.os.replace
+
+    def cross_device_replace(src, dst):
+        if str(src) == str(source):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(legacy.os, "replace", cross_device_replace)
+    legacy.move_file(source, destination)
+
+    assert destination.read_bytes() == b"photo"
+    assert not source.exists()
 
 
 def test_public_uploader_cannot_open_admin(monkeypatch, tmp_path):
