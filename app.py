@@ -1,4 +1,4 @@
-import html, io, json, os, re, secrets, tempfile, time
+import errno, html, io, json, os, re, secrets, shutil, tempfile, time
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -173,6 +173,15 @@ def unique(folder,name):
     while out.exists():
         out=d/f'{Path(name).stem}_{n}{Path(name).suffix}'; n+=1
     return out
+
+
+def move_file(source,destination):
+    try:
+        os.replace(source,destination)
+    except OSError as exc:
+        if exc.errno!=errno.EXDEV:
+            raise
+        shutil.move(source,destination)
 
 
 def portal_public_url(c,slug,p):
@@ -354,7 +363,7 @@ async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=
                 if size>MAX_FILE_MB*1024*1024: raise HTTPException(413,'File too large')
                 h.write(chunk)
         if ext not in ALLOWED:
-            dest=unique(p['fallback_dir'],name); os.replace(tmp,dest); tmp=None
+            dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return {'status':'fallback','filename':dest.name}
         dt=last_modified or datetime.now(timezone.utc).isoformat()
         headers={'x-api-key':key,'Accept':'application/json'}
@@ -365,10 +374,10 @@ async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=
                 with open(tmp,'rb') as h:
                     rr=await client.post(base+'/assets',headers=headers,data=data,files={'assetData':(name,h,file.content_type or 'application/octet-stream')})
         except httpx.HTTPError as exc:
-            dest=unique(p['fallback_dir'],name); os.replace(tmp,dest); tmp=None
+            dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich connection failed: {exc.__class__.__name__}'},status_code=202)
         if rr.status_code>=400:
-            dest=unique(p['fallback_dir'],name); os.replace(tmp,dest); tmp=None
+            dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich HTTP {rr.status_code}'},status_code=202)
         return {'status':'uploaded','filename':name}
     finally:
