@@ -1,6 +1,6 @@
 services:
   immich-upload-gateway:
-    container_name: "${GATEWAY_CONTAINER_NAME:-immich-upload-gateway}"
+    container_name: "${GATEWAY_CONTAINER_NAME:-immich-gateway}"
     build: .
     restart: unless-stopped
     ports:
