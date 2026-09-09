@@ -41,6 +41,17 @@ def test_valid_public_upload_page_never_requires_authentik(monkeypatch, tmp_path
     assert "Upload files" in response.text
 
 
+def test_public_upload_page_has_per_file_progress_and_retry(monkeypatch, tmp_path):
+    _, _, client = load_gateway(monkeypatch, tmp_path, auth_enabled=True)
+    response = client.get("/work?t=public-token")
+
+    assert 'id="files"' in response.text
+    assert "xhr.upload.onprogress" in response.text
+    assert "retry.onclick" in response.text
+    assert "data.reason||data.detail||data.message" in response.text
+    assert "Network error. Check your connection and try again." in response.text
+
+
 def test_public_uploader_cannot_open_admin(monkeypatch, tmp_path):
     _, _, client = load_gateway(monkeypatch, tmp_path, auth_enabled=True)
     response = client.get("/admin")
@@ -71,6 +82,23 @@ def test_authenticated_admin_session_succeeds(monkeypatch, tmp_path):
     assert "Authentication" in response.text
 
 
+def test_qr_uses_custom_domain_from_admin_form(monkeypatch, tmp_path):
+    legacy, _, client = load_gateway(monkeypatch, tmp_path, auth_enabled=True)
+    cookie = legacy.ser.dumps({"t": 1, "sub": "fingerprint", "name": "Owner", "provider": "authentik"})
+    client.cookies.set("admin_session", cookie)
+    generated = []
+
+    class FakeQr:
+        def save(self, target, format):
+            target.write(b"png")
+
+    monkeypatch.setattr(legacy.qrcode, "make", lambda url: generated.append(url) or FakeQr())
+    response = client.get("/admin/qr/work?domain=https%3A%2F%2Fphotos.example.test%2Fignored")
+
+    assert response.status_code == 200
+    assert generated == ["https://photos.example.test/"]
+
+
 def test_invalid_or_expired_oidc_exchange_is_rejected(monkeypatch, tmp_path):
     _, secure, client = load_gateway(monkeypatch, tmp_path, auth_enabled=True)
 
@@ -93,3 +121,4 @@ def test_health_never_exposes_secrets(monkeypatch, tmp_path):
     assert "immich-secret" not in body
     assert "test-client-secret" not in body
     assert "public-token" not in body
+
