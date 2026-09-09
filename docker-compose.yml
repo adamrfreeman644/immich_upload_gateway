@@ -1,5 +1,6 @@
 services:
   immich-upload-gateway:
+    container_name: "${GATEWAY_CONTAINER_NAME:-immich-upload-gateway}"
     build: .
     restart: unless-stopped
     ports:
@@ -25,6 +26,7 @@ services:
       - immich-gateway-updater
 
   immich-gateway-updater:
+    container_name: "${UPDATER_CONTAINER_NAME:-immich-gateway-updater}"
     build:
       context: .
       dockerfile: Dockerfile.updater
@@ -38,3 +40,4 @@ services:
     volumes:
       - "${APP_HOST_PATH:-.}:/appsrc"
       - /var/run/docker.sock:/var/run/docker.sock
+
