@@ -6,12 +6,20 @@ APP_DIR=Path(os.getenv('APP_DIR','/appsrc'))
 REPO=os.getenv('REPO','adamrfreeman644/immich_upload_gateway')
 BRANCH=os.getenv('BRANCH','main')
 PORT=int(os.getenv('UPDATER_PORT','8093'))
+HEALTH_URL=os.getenv('HEALTH_URL','http://immich-upload-gateway:8092/health')
 STATE=Path('/tmp/immich-gateway-updater.json')
 LOCK=threading.Lock()
 
-def version_local():
+def version_source():
     try: return (APP_DIR/'VERSION').read_text().strip()
     except Exception: return 'unknown'
+
+def version_running():
+    try:
+        with urllib.request.urlopen(HEALTH_URL,timeout=5) as r:
+            return str(json.loads(r.read().decode()).get('version') or '').strip() or 'unknown'
+    except Exception:
+        return 'unknown'
 
 def version_latest():
     url=f'https://raw.githubusercontent.com/{REPO}/{BRANCH}/VERSION'
@@ -41,10 +49,10 @@ class H(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def do_GET(self):
         if self.path!='/status': return self.sendj({'error':'not found'},404)
-        s=read_state(); current=version_local()
+        s=read_state(); current=version_running(); source=version_source()
         try: latest=version_latest(); err=''
         except Exception as exc: latest=''; err=str(exc)
-        self.sendj({'current':current,'latest':latest,'update_available':bool(latest and latest!=current),'error':err,**s})
+        self.sendj({'current':current,'source':source,'latest':latest,'update_available':bool(latest and latest!=current),'error':err,**s})
     def do_POST(self):
         if self.path!='/install': return self.sendj({'error':'not found'},404)
         s=read_state()
@@ -52,3 +60,4 @@ class H(BaseHTTPRequestHandler):
         threading.Thread(target=run_update,daemon=True).start(); self.sendj({'ok':True,'message':'Update started'},202)
 
 ThreadingHTTPServer(('0.0.0.0',PORT),H).serve_forever()
+
