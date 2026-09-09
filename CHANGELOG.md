@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4 — Cross-filesystem fallback uploads
+
+- Fix fallback saves from container `/tmp` to bind-mounted Unraid storage by handling cross-device moves safely.
+
 ## 0.4.3 — Collision-free container naming
 
 - Use `immich-gateway` as the short default gateway container name so migration can complete while the legacy `immich-upload-gateway` container still exists.
