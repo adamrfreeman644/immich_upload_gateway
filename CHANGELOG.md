@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2 — Clear uploads and reliable update detection
+
+- Show a progress bar and result for every selected upload.
+- Display per-file failure reasons and allow individual retries.
+- Generate QR codes from the first custom domain currently entered in Admin.
+- Compare the latest release with the version reported by the running gateway, not only the source directory.
+- Rebuild when source files are current but the running gateway image is stale.
+- Use short configurable container names by default.
+
 ## 0.4.0 — Multi-portal domains and in-app updater
 
 - Fix updater rollback caused by the application reporting a hard-coded version different from the repository `VERSION` file.
@@ -33,3 +42,4 @@
 - Add non-secret authentication provider/status information and OIDC-aware logout.
 - Preserve existing portal tokens, Immich keys, fallback directories, configuration and updater behavior.
 - Add automated public/admin boundary, OIDC failure and health secrecy checks.
+
