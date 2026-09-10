@@ -1,0 +1,29 @@
+{
+  "apps": [
+    {
+      "id": "immich-gateway",
+      "name": "Immich Upload Gateway",
+      "repo": "adamrfreeman644/immich_upload_gateway",
+      "branch": "main",
+      "app_dir": "/apps/immich-gateway",
+      "version_file": "VERSION",
+      "compose_file": "docker-compose.yml",
+      "compose_service": "immich-upload-gateway",
+      "health_url": "http://127.0.0.1:8092/health",
+      "health_version_field": "version",
+      "managed_files": [
+        "app.py",
+        "Dockerfile",
+        "docker-compose.yml",
+        "requirements.txt",
+        "VERSION",
+        "README.md",
+        "CHANGELOG.md",
+        ".env.example"
+      ],
+      "preflight": [
+        ["python3", "-m", "py_compile", "app.py"]
+      ]
+    }
+  ]
+}
