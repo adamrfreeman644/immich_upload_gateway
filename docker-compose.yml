@@ -5,8 +5,6 @@ services:
     restart: unless-stopped
     ports:
       - "${GATEWAY_PORT:-8092}:8092"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       AUTH_ENABLED: "${AUTH_ENABLED:-false}"
       OIDC_ISSUER: "${OIDC_ISSUER:-}"
@@ -18,17 +16,16 @@ services:
       SESSION_SECRET: "${SESSION_SECRET:-}"
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
       MAX_FILE_MB: "${MAX_FILE_MB:-5000}"
-      UPDATER_URL: "${UPDATER_URL:-http://host.docker.internal:8093}"
+      UPDATER_URL: "http://immich-gateway-updater:8093"
     volumes:
       - "${CONFIG_HOST_PATH:-./config}:/config"
       - "${WORK_FALLBACK_HOST_PATH:-./fallback/work}:/fallback/work"
       - "${PERSONAL_FALLBACK_HOST_PATH:-./fallback/personal}:/fallback/personal"
       - "${PORTAL_FALLBACK_HOST_PATH:-./fallback/portals}:/fallback/portals"
+    depends_on:
+      - immich-gateway-updater
 
-  # Migration/rollback only. New installs should use shared-updater/docker-compose.yml
-  # so one updater container can manage all applications on the server.
   immich-gateway-updater:
-    profiles: ["legacy-updater"]
     container_name: "${UPDATER_CONTAINER_NAME:-immich-gateway-updater}"
     build:
       context: .
