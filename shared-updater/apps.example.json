@@ -35,6 +35,7 @@
       "branch": "main",
       "app_dir": "/apps/rip-manager",
       "version_file": "VERSION",
+      "github_token_file": "/run/secrets/rip-github-token",
       "compose_file": "rip_manager_container/docker-compose.yml",
       "compose_service": "rip-manager",
       "health_url": "http://127.0.0.1:8088/api/info",
