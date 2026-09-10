@@ -1,5 +1,16 @@
 # Changelog
 
+All notable changes to Immich Upload Gateway are recorded here.
+
+## 0.4.5 — Upload thumbnails and documentation
+
+- Add a small local preview thumbnail beside every selected file's individual progress bar.
+- Generate image previews in the browser without recompressing or separately uploading thumbnails.
+- Attempt browser-native video previews with a clear fallback icon when preview generation is unsupported.
+- Keep existing per-file progress, failure reasons and retry behaviour.
+- Rewrite the main README as a complete fresh-install, configuration, reverse-proxy, usage, update, migration and troubleshooting guide.
+- Clarify that Immich assets belong to the user who owns the API key configured for the portal and therefore appear in that user's normal Photos timeline.
+
 ## 0.4.4 — Cross-filesystem fallback uploads
 
 - Fix fallback saves from container `/tmp` to bind-mounted Unraid storage by handling cross-device moves safely.
@@ -30,7 +41,7 @@
 - Add an isolated updater sidecar so Docker control is not exposed to the public gateway container.
 - Remove hard-coded container names and make the host port configurable for side-by-side migration from 0.2.0.
 - Add a persistent fallback root for newly-created portals.
-- Document the safe 0.2.0 → 0.4.0 parallel-container migration procedure.
+- Document the safe 0.2.0 → 0.4.x parallel-container migration procedure.
 
 ## 0.3.1 — Unraid startup safety
 
@@ -38,16 +49,3 @@
 - Add a flash-based Unraid startup helper that never creates paths under `/mnt/user` during early boot.
 - Add an installer that removes the old unsafe direct `/mnt/user` startup line and installs the safe helper.
 - Fail safely when user shares do not mount instead of creating directories on Unraid's RAM root filesystem.
-
-## 0.3.0 — Shared authentication architecture
-
-- Keep public upload links account-free and independent of Authentik availability.
-- Protect `/admin` and `/admin/...` with Authentik OpenID Connect when enabled.
-- Use Authorization Code flow, PKCE support, validated OIDC state/nonce/provider tokens and secure local admin sessions.
-- Open Authentik sign-in in a popup so the Gateway page remains in place.
-- Fail admin access closed on enabled-but-invalid OIDC configuration without breaking valid public upload routes.
-- Preserve the previous local admin password only while `AUTH_ENABLED=false` for migration/rollback.
-- Add non-secret authentication provider/status information and OIDC-aware logout.
-- Preserve existing portal tokens, Immich keys, fallback directories, configuration and updater behavior.
-- Add automated public/admin boundary, OIDC failure and health secrecy checks.
-
