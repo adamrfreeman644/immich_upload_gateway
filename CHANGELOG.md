@@ -2,6 +2,19 @@
 
 All notable changes to Immich Upload Gateway are recorded here.
 
+## 0.5.0 — Shared updater architecture
+
+- Add a reusable manifest-driven **AD53 Shared App Updater** under `shared-updater/`.
+- Allow one updater container to manage multiple self-hosted applications on the same Docker host.
+- Keep Docker socket access isolated to the shared updater rather than exposing it to public application containers.
+- Add per-app status and install APIs: `GET /apps/<id>/status` and `POST /apps/<id>/install`.
+- Keep compatibility `GET /status` and `POST /install` endpoints for the Gateway using `DEFAULT_APP_ID=immich-gateway`.
+- Add per-app GitHub version checks, timestamped managed-file backups, archive validation, preflight commands, Compose rebuild/recreate, health/version verification and automatic rollback.
+- Change the Gateway Compose file to use the shared updater on the Docker host by default.
+- Keep the previous dedicated Gateway updater as an optional `legacy-updater` Compose profile for migration/rollback only.
+- Add `host.docker.internal:host-gateway` mapping so the Gateway can reach the host-side shared updater on Linux/Unraid.
+- Add complete shared-updater deployment and app-registry documentation.
+
 ## 0.4.5 — Upload thumbnails and documentation
 
 - Add a small local preview thumbnail beside every selected file's individual progress bar.
