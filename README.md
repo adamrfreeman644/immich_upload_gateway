@@ -2,9 +2,9 @@
 
 A lightweight self-hosted upload gateway for [Immich](https://immich.app/) that lets other people upload original photos and videos into your Immich library without giving them an Immich account.
 
-**Current version: 0.4.5**
+**Current version: 0.5.0**
 
-The gateway provides multiple independent upload portals, custom domains, QR codes, per-file upload progress and thumbnails, persistent fallback storage, a private admin interface and an in-app updater.
+The gateway provides multiple independent upload portals, custom domains, QR codes, per-file upload progress and thumbnails, persistent fallback storage, a private admin interface and integration with a reusable shared updater.
 
 > This project is an independent companion for Immich and is not part of the Immich project.
 
@@ -32,8 +32,7 @@ If Immich cannot be reached, the gateway saves the original file to persistent f
 - Friendly and industrial portal designs with configurable accent colours
 - Password-protected Admin interface
 - Health/version endpoints
-- In-app GitHub update checking and installation
-- Automatic rollback if an update fails its health check
+- Shared update service with backup, validation and rollback
 - Docker Compose deployment
 - Designed to work well on Unraid
 
@@ -68,13 +67,13 @@ cd immich-upload-gateway
 cp .env.example .env
 ```
 
-Edit `.env` before starting the containers:
+Edit `.env`:
 
 ```bash
 nano .env
 ```
 
-At minimum change `ADMIN_PASSWORD`. You should also set a long random `SESSION_SECRET` rather than leaving `CHANGE_ME`.
+At minimum change `ADMIN_PASSWORD`. Also set a long random `SESSION_SECRET` rather than leaving `CHANGE_ME`.
 
 Typical Unraid configuration:
 
@@ -88,19 +87,16 @@ MAX_FILE_MB=5000
 GATEWAY_PORT=8092
 COMPOSE_PROJECT_NAME=immich-upload-gateway
 GATEWAY_CONTAINER_NAME=immich-gateway
-UPDATER_CONTAINER_NAME=immich-gateway-updater
 APP_HOST_PATH=/mnt/user/appdata/immich-upload-gateway
+UPDATER_URL=http://host.docker.internal:8093
 
 CONFIG_HOST_PATH=/mnt/user/appdata/immich-upload-gateway/config
 WORK_FALLBACK_HOST_PATH=/mnt/user/PhotoUploadFallback/Work
 PERSONAL_FALLBACK_HOST_PATH=/mnt/user/PhotoUploadFallback/Personal
 PORTAL_FALLBACK_HOST_PATH=/mnt/user/PhotoUploadFallback/Portals
-
-REPO=adamrfreeman644/immich_upload_gateway
-BRANCH=main
 ```
 
-Create/start the stack:
+Start the gateway:
 
 ```bash
 docker compose up -d --build
@@ -113,9 +109,51 @@ docker compose ps
 curl http://YOUR-SERVER-IP:8092/health
 ```
 
-The health response should report `status: ok` and the current version.
+The health response should report `status: ok` and version `0.5.0`.
 
-## 3. Open Admin
+## 3. Install the shared updater
+
+Version 0.5.0 introduces a separate **AD53 Shared App Updater** that can eventually manage all compatible self-hosted apps on the server.
+
+It replaces the need for one updater sidecar per application.
+
+From the Gateway checkout:
+
+```bash
+cd /mnt/user/appdata/immich-upload-gateway/shared-updater
+cp apps.example.json apps.json
+mkdir -p state
+```
+
+Review `apps.json`. The default Immich Gateway entry expects:
+
+```text
+/mnt/user/appdata/immich-upload-gateway
+```
+
+as the Gateway source directory.
+
+Start the shared updater:
+
+```bash
+docker compose up -d --build
+```
+
+Check it:
+
+```bash
+curl http://127.0.0.1:8093/health
+curl http://127.0.0.1:8093/apps
+curl http://127.0.0.1:8093/apps/immich-gateway/status
+```
+
+The updater runs with `network_mode: host`, so it can validate application health endpoints using localhost host ports.
+
+The updater is intentionally **not public-facing**. It has access to `/var/run/docker.sock`, so keep port `8093` private to the server/LAN.
+
+For full updater documentation see [`shared-updater/README.md`](shared-updater/README.md).
+
+## 4. Open Admin
 
 Open:
 
@@ -127,9 +165,9 @@ Sign in using `ADMIN_PASSWORD` from `.env`.
 
 The default configuration contains **Work** and **Personal** portals. You can edit these, disable them, or create additional portals.
 
-## 4. Configure the Immich server
+## 5. Configure the Immich server
 
-At the top of Admin set **Immich URL** to an address reachable **from the gateway container/host**.
+At the top of Admin set **Immich URL** to an address reachable from the gateway container/host.
 
 Example:
 
@@ -141,7 +179,7 @@ Do not use the public upload portal address here. This must point to the actual 
 
 The gateway automatically handles the Immich `/api` path.
 
-## 5. Configure a portal
+## 6. Configure a portal
 
 For each portal configure:
 
@@ -159,7 +197,7 @@ Press **Save settings**.
 
 The API key field is intentionally blank after saving; entering nothing later keeps the existing stored key.
 
-## 6. Test locally first
+## 7. Test locally first
 
 Before configuring a public domain, use the portal link shown in Admin or click **Open portal**.
 
@@ -174,7 +212,7 @@ Then open Immich using the user that created the API key. The uploaded asset sho
 
 If it appears under a different Immich user, the portal is using that other user's API key. Replace the portal key with one created by the intended user.
 
-## 7. Custom domains and HTTPS
+## 8. Custom domains and HTTPS
 
 A portal can be served directly at a hostname such as:
 
@@ -198,7 +236,6 @@ Create a Proxy Host for each portal domain:
 - **Scheme:** `http`
 - **Forward Hostname/IP:** IP address of the machine running the gateway
 - **Forward Port:** `8092` (or your `GATEWAY_PORT`)
-- **Websockets Support:** optional/not required for normal uploads
 
 Under **SSL**:
 
@@ -216,13 +253,14 @@ After HTTPS is working you can set:
 COOKIE_SECURE=true
 ```
 
-and recreate the stack:
+and recreate the gateway:
 
 ```bash
+cd /mnt/user/appdata/immich-upload-gateway
 docker compose up -d
 ```
 
-## 8. QR codes
+## 9. QR codes
 
 Admin has a **QR code** button for each portal.
 
@@ -230,7 +268,7 @@ If a portal has a custom domain, the QR code uses its first configured domain. O
 
 You can print/display the QR code for events, customers, family uploads or temporary collection points.
 
-## 9. How uploads are stored in Immich
+## 10. How uploads are stored in Immich
 
 The gateway sends accepted files to Immich's asset API using the portal's configured API key. It supplies the original file and its browser-provided modification timestamp and does not recompress the asset.
 
@@ -241,7 +279,7 @@ Therefore:
 - Same API key on Work + Personal = both feed the same Immich user's Photos timeline.
 - Different API keys = each portal feeds its respective Immich user's library.
 
-## 10. Fallback storage
+## 11. Fallback storage
 
 If the Immich connection fails or Immich returns an error, the gateway moves the original temporary upload into the portal's persistent fallback directory.
 
@@ -259,7 +297,7 @@ These locations are bind-mounted and survive container recreation.
 
 Unsupported extensions are also placed in fallback storage.
 
-## 11. File support and upload size
+## 12. File support and upload size
 
 The gateway currently accepts common photo, RAW and video formats including JPEG, PNG, WebP, HEIC/HEIF, GIF, TIFF, DNG, NEF, CR2/CR3, ARW, RAF, AVIF, MP4, MOV, M4V, 3GP, WebM, MKV and AVI.
 
@@ -267,42 +305,118 @@ The gateway currently accepts common photo, RAW and video formats including JPEG
 
 Your reverse proxy may have its own independent upload limit/timeouts, so increase those if very large videos fail before reaching the gateway.
 
-## 12. Updates
+## 13. Updates in v0.5.0+
 
 Open:
 
 **Admin → Updates**
 
-The updater compares the running gateway with the `VERSION` file on the configured GitHub branch.
+The Gateway now talks to the shared updater at the URL configured in `UPDATER_URL`.
 
-When **Install update** is selected, the updater:
+For compatibility, the shared updater exposes the old Gateway endpoints:
 
-1. Downloads the current repository branch.
-2. Verifies its version.
-3. Syntax-checks the Python application/updater.
-4. Backs up managed application files.
-5. Rebuilds the gateway service.
-6. Waits for the health check.
-7. Verifies the new running version.
-8. Restores and rebuilds the previous version automatically if validation fails.
+```text
+GET  /status
+POST /install
+```
 
-Only the isolated updater sidecar receives `/var/run/docker.sock`. The public gateway container does not.
+internally mapped to the configured default app (`immich-gateway`). It also provides the reusable multi-app API:
 
-### Manual update
+```text
+GET  /apps
+GET  /apps/<app-id>/status
+POST /apps/<app-id>/install
+```
 
-If required:
+For each app the shared updater:
+
+1. Checks the latest GitHub `VERSION`.
+2. Creates a timestamped backup of managed files.
+3. Downloads and validates the configured GitHub branch.
+4. Runs configured preflight checks.
+5. Replaces only explicitly managed files.
+6. Rebuilds only the target Compose service.
+7. Recreates only the target service.
+8. Waits for its health endpoint.
+9. Verifies the running version.
+10. Restores the previous managed files and rebuilds if validation fails.
+
+The Gateway itself does not receive `/var/run/docker.sock`.
+
+## 14. Moving from 0.4.5 to 0.5.0
+
+Because 0.4.5 still uses its dedicated updater sidecar, use this order for the first migration:
+
+### A. Pull the new source files without stopping the running gateway
+
+On Unraid:
 
 ```bash
 cd /mnt/user/appdata/immich-upload-gateway
 git pull
+```
+
+### B. Start the new shared updater first
+
+```bash
+cd /mnt/user/appdata/immich-upload-gateway/shared-updater
+cp -n apps.example.json apps.json
+mkdir -p state
 docker compose up -d --build
 ```
 
-Back up your persistent config/fallback directories before manual maintenance.
+Verify:
 
-## 13. Persistent data and backups
+```bash
+curl http://127.0.0.1:8093/apps/immich-gateway/status
+```
 
-Important persistent data includes:
+### C. Recreate the Gateway using the new single-app Compose configuration
+
+```bash
+cd /mnt/user/appdata/immich-upload-gateway
+docker compose up -d --build
+```
+
+### D. Remove the old dedicated updater container
+
+Once **Admin → Updates** successfully shows status through the shared updater:
+
+```bash
+docker rm -f immich-gateway-updater 2>/dev/null || true
+```
+
+The old updater definition remains available only through the optional `legacy-updater` profile for migration/rollback troubleshooting. A fresh install does not start it.
+
+From this point onward the Gateway itself is just one application container, while the single shared updater can manage it and additional applications.
+
+## 15. Adding more apps to the shared updater
+
+Edit:
+
+```text
+/mnt/user/appdata/immich-upload-gateway/shared-updater/apps.json
+```
+
+Add another app definition containing its:
+
+- unique ID
+- display name
+- GitHub repository/branch
+- mounted application directory
+- `VERSION` file
+- Compose file/service
+- health endpoint
+- managed files
+- optional preflight commands
+
+Then add that application's source directory as another bind mount in `shared-updater/docker-compose.yml` and recreate only the shared updater.
+
+See [`shared-updater/README.md`](shared-updater/README.md) for a complete example.
+
+## 16. Persistent data and backups
+
+Important Gateway persistent data includes:
 
 ```text
 /config/config.json
@@ -312,38 +426,11 @@ Important persistent data includes:
 /fallback/portals
 ```
 
-On a normal Unraid deployment these are bind-mounted to the host paths specified in `.env`.
+The shared updater additionally stores update state and backups in its persistent `state` directory.
 
-Back up at least the configuration directory and any fallback folders containing files not yet imported into Immich.
+Back up at least the Gateway configuration directory, fallback folders containing pending files, and shared-updater state if you want to retain update history/backups.
 
-Deleting/recreating a Docker container does not delete bind-mounted host data. Manually deleting the host directories does.
-
-## 14. Migrating an older installation
-
-Do not delete your existing config/fallback data first.
-
-For a side-by-side test, clone the current gateway into another appdata directory and use a different host port/container names:
-
-```dotenv
-GATEWAY_PORT=8093
-COMPOSE_PROJECT_NAME=immich-gateway-test
-GATEWAY_CONTAINER_NAME=immich-gateway-test
-UPDATER_CONTAINER_NAME=immich-gateway-updater-test
-APP_HOST_PATH=/mnt/user/appdata/immich-upload-gateway-test
-CONFIG_HOST_PATH=/mnt/user/appdata/immich-upload-gateway/config
-```
-
-The current configuration loader migrates older configuration schemas in place while preserving existing API keys, portal tokens and settings.
-
-Start the test stack:
-
-```bash
-docker compose up -d --build
-```
-
-Verify portals, uploads, Admin and `/health` before replacing the old installation.
-
-## 15. Troubleshooting
+## 17. Troubleshooting
 
 ### Upload says successful but I cannot see the photo in my main stream
 
@@ -357,6 +444,23 @@ Open Admin, enter an Immich API key on that portal and save settings.
 
 The browser successfully sent the file to the gateway, but the gateway could not complete the Immich upload. Check Immich availability, `Immich URL`, API-key validity and container logs. The original should be in fallback storage.
 
+### Admin → Updates says updater unavailable
+
+Check the shared updater first:
+
+```bash
+curl http://127.0.0.1:8093/health
+curl http://127.0.0.1:8093/apps/immich-gateway/status
+```
+
+Then confirm the Gateway `.env` contains:
+
+```dotenv
+UPDATER_URL=http://host.docker.internal:8093
+```
+
+and recreate the Gateway if the environment value changed.
+
 ### Portal domain shows the generic gateway page
 
 Check that the exact hostname is entered under that portal's **Custom domains** and that the reverse proxy preserves the Host/X-Forwarded-Host header.
@@ -365,44 +469,47 @@ Check that the exact hostname is entered under that portal's **Custom domains** 
 
 Check reverse-proxy body-size and timeout limits. `MAX_FILE_MB` only controls the gateway's own limit.
 
-### Check logs
+### Check Gateway logs
 
 ```bash
+cd /mnt/user/appdata/immich-upload-gateway
 docker compose logs -f immich-upload-gateway
 ```
 
-Updater logs:
+### Check shared updater logs
 
 ```bash
-docker compose logs -f immich-gateway-updater
+cd /mnt/user/appdata/immich-upload-gateway/shared-updater
+docker compose logs -f ad53-shared-updater
 ```
 
-### Check health
+### Check Gateway health
 
 ```bash
 curl http://YOUR-SERVER-IP:8092/health
 ```
 
-## 16. Security notes
+## 18. Security notes
 
 - Never expose Immich API keys to visitors or put them in URLs.
 - Use HTTPS for public portals.
 - Use a strong Admin password.
 - Use a strong random session secret.
-- Do not publicly expose `/config`, fallback host directories, the updater sidecar or Docker socket.
-- Only the updater sidecar should have Docker socket access.
+- Do not publicly expose `/config`, fallback host directories, the shared updater or Docker socket.
+- **Only the shared updater should have Docker socket access.**
 - Keep Immich itself updated and independently secured.
 - A custom-domain portal is intentionally an upload endpoint for anyone who can reach that hostname. Use an unguessable/token portal instead when public discoverability is inappropriate.
 
 ## Repository layout
 
 - `app.py` — gateway, portal UI and Admin UI
-- `docker-compose.yml` — gateway/updater stack
-- `Dockerfile` — gateway image
-- `Dockerfile.updater` — updater image
-- `updater_service.py` — updater service
-- `gateway-updater.sh` — validated update/rollback process
-- `.env.example` — deployment configuration template
+- `docker-compose.yml` — Gateway application Compose definition
+- `Dockerfile` — Gateway image
+- `shared-updater/` — reusable central updater service and app registry
+- `Dockerfile.updater` — legacy per-Gateway updater image retained for migration/rollback only
+- `updater_service.py` — legacy updater service retained for migration/rollback only
+- `gateway-updater.sh` — legacy update script retained for migration/rollback only
+- `.env.example` — Gateway deployment configuration template
 - `VERSION` — current application version
 - `CHANGELOG.md` — release history
 - `tests/` — automated tests
