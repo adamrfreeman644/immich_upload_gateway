@@ -13,4 +13,6 @@ services:
       - "${UPDATER_CONFIG_HOST_PATH:-./apps.json}:/config/apps.json:ro"
       - "${UPDATER_STATE_HOST_PATH:-./state}:/state"
       - "${IMMICH_GATEWAY_APP_PATH:-/mnt/user/appdata/immich-upload-gateway}:/apps/immich-gateway"
+      - "${INVENTORY_MANAGER_APP_PATH:-/mnt/user/appdata/stock-take}:/apps/inventory-manager"
+      - "${RIP_MANAGER_APP_PATH:-/mnt/user/appdata/rip-manager}:/apps/rip-manager"
       - /var/run/docker.sock:/var/run/docker.sock
