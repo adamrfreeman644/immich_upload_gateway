@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import shutil
@@ -22,13 +23,11 @@ LOCKS_GUARD = threading.Lock()
 def load_config():
     with CONFIG.open(encoding="utf-8") as f:
         data = json.load(f)
-    apps = data.get("apps", [])
     result = {}
-    for app in apps:
+    for app in data.get("apps", []):
         app_id = str(app.get("id", "")).strip()
-        if not app_id:
-            continue
-        result[app_id] = app
+        if app_id:
+            result[app_id] = app
     return result
 
 
@@ -63,6 +62,29 @@ def write_state(app_id, **updates):
     os.replace(tmp, state_path(app_id))
 
 
+def github_token(app):
+    token = str(app.get("github_token", "")).strip()
+    token_file = str(app.get("github_token_file", "")).strip()
+    if not token and token_file:
+        try:
+            token = Path(token_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+    return token
+
+
+def github_request(app, url):
+    headers = {
+        "User-Agent": "ad53-shared-updater",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = github_token(app)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(url, headers=headers)
+
+
 def local_version(app):
     try:
         return (Path(app["app_dir"]) / app.get("version_file", "VERSION")).read_text(encoding="utf-8").strip()
@@ -74,9 +96,10 @@ def latest_version(app):
     repo = app["repo"]
     branch = app.get("branch", "main")
     version_file = app.get("version_file", "VERSION")
-    url = f"https://raw.githubusercontent.com/{repo}/{branch}/{version_file}"
-    with urllib.request.urlopen(url, timeout=20) as response:
-        return response.read().decode().strip()
+    url = f"https://api.github.com/repos/{repo}/contents/{version_file}?ref={branch}"
+    with urllib.request.urlopen(github_request(app, url), timeout=20) as response:
+        payload = json.loads(response.read().decode())
+    return base64.b64decode(payload["content"]).decode().strip()
 
 
 def running_version(app):
@@ -135,6 +158,16 @@ def compose_command(app, action):
     raise ValueError(action)
 
 
+def copy_item(src, dst):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if src.is_dir():
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy2(src, dst)
+
+
 def restore_backup(app, backup, lines):
     app_dir = Path(app["app_dir"])
     managed = app.get("managed_files", [])
@@ -143,8 +176,7 @@ def restore_backup(app, backup, lines):
         src = backup / rel
         dst = app_dir / rel
         if src.exists():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            copy_item(src, dst)
         elif dst.exists():
             if dst.is_file() or dst.is_symlink():
                 dst.unlink()
@@ -152,6 +184,14 @@ def restore_backup(app, backup, lines):
                 shutil.rmtree(dst)
     run_checked(compose_command(app, "build"), app_dir, lines)
     run_checked(compose_command(app, "up"), app_dir, lines)
+
+
+def download_source(app, archive):
+    repo = app["repo"]
+    branch = app.get("branch", "main")
+    url = f"https://api.github.com/repos/{repo}/zipball/{branch}"
+    with urllib.request.urlopen(github_request(app, url), timeout=120) as response, archive.open("wb") as out:
+        shutil.copyfileobj(response, out)
 
 
 def perform_update(app_id):
@@ -177,22 +217,14 @@ def perform_update(app_id):
         for rel in app.get("managed_files", []):
             src = app_dir / rel
             if src.exists():
-                dst = backup_root / rel
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                if src.is_dir():
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
+                copy_item(src, backup_root / rel)
         log_append(lines, f"Backup created: {backup_root}")
 
         with tempfile.TemporaryDirectory(prefix=f"update-{app_id}-") as temp_dir:
             temp = Path(temp_dir)
             archive = temp / "source.zip"
-            repo = app["repo"]
-            branch = app.get("branch", "main")
-            url = f"https://github.com/{repo}/archive/refs/heads/{branch}.zip"
-            log_append(lines, f"Downloading {repo}@{branch}")
-            urllib.request.urlretrieve(url, archive)
+            log_append(lines, f"Downloading {app['repo']}@{app.get('branch', 'main')}")
+            download_source(app, archive)
             with zipfile.ZipFile(archive) as zf:
                 zf.extractall(temp / "src")
             roots = [p for p in (temp / "src").iterdir() if p.is_dir()]
@@ -208,16 +240,8 @@ def perform_update(app_id):
 
             for rel in app.get("managed_files", []):
                 src = staged / rel
-                dst = app_dir / rel
-                if not src.exists():
-                    continue
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                if src.is_dir():
-                    if dst.exists():
-                        shutil.rmtree(dst)
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
+                if src.exists():
+                    copy_item(src, app_dir / rel)
 
         try:
             run_checked(compose_command(app, "build"), app_dir, lines)
