@@ -11,19 +11,37 @@
       "compose_service": "immich-upload-gateway",
       "health_url": "http://127.0.0.1:8092/health",
       "health_version_field": "version",
-      "managed_files": [
-        "app.py",
-        "Dockerfile",
-        "docker-compose.yml",
-        "requirements.txt",
-        "VERSION",
-        "README.md",
-        "CHANGELOG.md",
-        ".env.example"
-      ],
-      "preflight": [
-        ["python3", "-m", "py_compile", "app.py"]
-      ]
+      "managed_files": ["app.py","Dockerfile","docker-compose.yml","requirements.txt","VERSION","README.md","CHANGELOG.md",".env.example"],
+      "preflight": [["python3","-m","py_compile","app.py"]]
+    },
+    {
+      "id": "inventory-manager",
+      "name": "Inventory Manager",
+      "repo": "adamrfreeman644/stock-take",
+      "branch": "main",
+      "app_dir": "/apps/inventory-manager",
+      "version_file": "VERSION",
+      "compose_file": "docker-compose.yml",
+      "compose_service": "inventory-manager",
+      "health_url": "http://127.0.0.1:1975/health",
+      "health_version_field": "version",
+      "managed_files": ["app","Dockerfile","docker-compose.yml","requirements.txt","VERSION","README.md","CHANGELOG.md",".env.example"],
+      "preflight": [["python3","-m","py_compile","app/main.py"]]
+    },
+    {
+      "id": "rip-manager",
+      "name": "Rip Manager",
+      "repo": "adamrfreeman644/Rip-Manager",
+      "branch": "main",
+      "app_dir": "/apps/rip-manager",
+      "version_file": "VERSION",
+      "compose_file": "rip_manager_container/docker-compose.yml",
+      "compose_service": "rip-manager",
+      "health_url": "http://127.0.0.1:8088/api/info",
+      "health_version_field": "version",
+      "managed_files": ["VERSION","release.json","README.md","rip_manager_container/app","rip_manager_container/Dockerfile","rip_manager_container/docker-compose.yml","rip_manager_container/requirements.txt","rip_manager_container/simulator_node.py"],
+      "preflight": [["python3","-m","py_compile","rip_manager_container/app/main.py"]],
+      "health_timeout_seconds": 120
     }
   ]
 }
