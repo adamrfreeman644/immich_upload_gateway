@@ -1,163 +1,141 @@
 # AD53 Shared App Updater
 
-One isolated updater container can manage multiple self-hosted applications on the same Docker host.
+One isolated updater container manages the local Docker application updates for the self-hosted AD53 apps on the same Unraid/Docker host.
 
-The updater is manifest-driven. Each managed app declares its GitHub repository, local source directory, Compose service, health/version endpoint, files that may be replaced, and optional preflight checks. This keeps Docker socket access out of public application containers while avoiding one updater sidecar per app.
+Current registered apps:
+
+- `immich-gateway` — Immich Upload Gateway
+- `inventory-manager` — Inventory Manager / stock-take
+- `rip-manager` — Rip Manager local container
+
+Rip Node updates remain handled by Rip Manager because those updates target separate node machines rather than the local Docker host.
 
 ## Security model
 
-The shared updater has access to `/var/run/docker.sock` and therefore has powerful control over Docker on the host. Keep port `8093` private to the LAN/host. Do not expose it directly to the public internet.
+`ad53-shared-updater` is the only application updater container that needs `/var/run/docker.sock`. Because Docker socket access is powerful, keep updater port `8093` private to the host/LAN and do not expose it directly to the internet.
 
-Application containers do not need Docker socket access. They only call the updater HTTP API to read status or request an update.
+Application containers do not need Docker socket access. Their Updates pages call the shared updater HTTP API.
 
-## Install on Unraid
+Private GitHub repositories are supported through an optional per-app read-only token file. Rip Manager uses the existing host token mounted at `/run/secrets/rip-github-token`.
 
-From the Immich Upload Gateway checkout:
+## Install / refresh on Unraid
 
 ```bash
-cd /mnt/user/appdata/immich-upload-gateway/shared-updater
+cd /mnt/user/appdata/immich-upload-gateway
+git pull
+cd shared-updater
 cp apps.example.json apps.json
 mkdir -p state
-```
-
-Review `apps.json`. For the default Immich Gateway entry, the expected host application directory is:
-
-```text
-/mnt/user/appdata/immich-upload-gateway
-```
-
-Start the updater:
-
-```bash
 docker compose up -d --build
 ```
 
-Check it:
+If you have manually customised `apps.json`, merge the new entries instead of blindly overwriting it.
+
+The default host paths are:
+
+```text
+/mnt/user/appdata/immich-upload-gateway
+/mnt/user/appdata/stock-take
+/mnt/user/appdata/rip-manager
+```
+
+They can be overridden with:
+
+```text
+IMMICH_GATEWAY_APP_PATH
+INVENTORY_MANAGER_APP_PATH
+RIP_MANAGER_APP_PATH
+RIP_GITHUB_TOKEN_PATH
+```
+
+## Verify all apps
 
 ```bash
 curl http://127.0.0.1:8093/health
 curl http://127.0.0.1:8093/apps
 curl http://127.0.0.1:8093/apps/immich-gateway/status
+curl http://127.0.0.1:8093/apps/inventory-manager/status
+curl http://127.0.0.1:8093/apps/rip-manager/status
 ```
 
-The Gateway's older updater API is also supported through the configured `DEFAULT_APP_ID`:
+`/apps` should show all three applications.
+
+## API
+
+```text
+GET  /health
+GET  /apps
+GET  /apps/<app-id>/status
+POST /apps/<app-id>/install
+```
+
+For backwards compatibility with the Immich Gateway migration, `DEFAULT_APP_ID` also provides:
 
 ```text
 GET  /status
 POST /install
 ```
 
-This compatibility path lets the existing Immich Gateway Admin → Updates page work without requiring an immediate UI rewrite.
+## Update flow
+
+For each registered application the updater:
+
+1. Reads the running/local version.
+2. Reads the latest repository `VERSION` marker.
+3. Backs up only that app's configured managed files.
+4. Downloads the configured GitHub branch.
+5. Supports authenticated download for private repositories when a token is configured.
+6. Verifies the downloaded version.
+7. Runs configured preflight checks.
+8. Replaces only explicitly managed source files/directories.
+9. Builds only the target Compose service.
+10. Recreates only that service.
+11. Checks the configured health/version endpoint.
+12. Automatically restores the backup and rebuilds the previous version if validation fails.
+
+State and source backups are stored under the updater's persistent `/state` directory.
+
+## Application-specific behaviour
+
+### Immich Upload Gateway
+
+Uses `/health` on port 8092 and updates only the gateway service.
+
+### Inventory Manager
+
+Uses `/health` on port 1975. The old `inventory-updater` sidecar is no longer required; the application's Updates page now calls `ad53-shared-updater`.
+
+### Rip Manager
+
+Uses `/api/info` on port 8088 so the updater can validate the exact running Manager version. The repository is private, so the existing GitHub token is mounted read-only into the shared updater.
+
+Only the local `rip-manager` Docker service is managed here. Remote Rip Node deployment/update remains inside the Rip Manager node workflow.
 
 ## Adding another app
 
-Add another object to the `apps` array in `apps.json`, then mount that application's host source directory into the updater container.
+Add a new entry to `apps.json` and mount its project directory into `shared-updater/docker-compose.yml`.
 
-Example registry entry:
+A normal entry contains:
 
 ```json
 {
-  "id": "inventory-manager",
-  "name": "Inventory Manager",
-  "repo": "your-user/inventory-manager",
+  "id": "my-app",
+  "name": "My App",
+  "repo": "owner/repository",
   "branch": "main",
-  "app_dir": "/apps/inventory-manager",
+  "app_dir": "/apps/my-app",
   "version_file": "VERSION",
   "compose_file": "docker-compose.yml",
-  "compose_service": "inventory-manager",
-  "health_url": "http://127.0.0.1:1975/health",
+  "compose_service": "my-app",
+  "health_url": "http://127.0.0.1:1234/health",
   "health_version_field": "version",
-  "managed_files": [
-    "app.py",
-    "Dockerfile",
-    "docker-compose.yml",
-    "requirements.txt",
-    "VERSION"
-  ],
-  "preflight": [
-    ["python3", "-m", "py_compile", "app.py"]
-  ]
+  "managed_files": ["app", "Dockerfile", "docker-compose.yml", "VERSION"],
+  "preflight": [["python3", "-m", "py_compile", "app/main.py"]]
 }
 ```
 
-Then add the corresponding bind mount to `shared-updater/docker-compose.yml`:
-
-```yaml
-- /mnt/user/appdata/inventory-manager:/apps/inventory-manager
-```
-
-Recreate only the updater:
-
-```bash
-docker compose up -d --build
-```
-
-No Docker socket or updater sidecar needs to be added to the Inventory Manager application itself.
-
-## API
-
-### List all apps
-
-```text
-GET /apps
-```
-
-### App status
-
-```text
-GET /apps/<app-id>/status
-```
-
-Returns the running version, local source version, latest GitHub version, update availability and last update state/log.
-
-### Install update
-
-```text
-POST /apps/<app-id>/install
-```
-
-Starts that app's update. Only one update for a given app can run at a time.
-
-### Health
-
-```text
-GET /health
-```
-
-## Update flow
-
-For each app the updater:
-
-1. Reads the currently installed/running version.
-2. Reads the latest version from the app repository's `VERSION` file.
-3. Creates a timestamped backup of the configured managed files.
-4. Downloads the configured GitHub branch as a ZIP archive.
-5. Confirms the archive version matches the expected latest version.
-6. Runs configured preflight checks.
-7. Copies only the explicitly listed managed files into the application directory.
-8. Runs `docker compose build --pull <service>`.
-9. Recreates only the target service with `docker compose up -d --no-deps <service>`.
-10. Waits for the configured health endpoint to report the expected version.
-11. Restores the backup and rebuilds the previous service if validation fails.
-
-Backups and update state are stored under the shared updater's persistent `/state` volume.
-
-## Registry fields
-
-- `id`: unique updater ID used in the API.
-- `name`: display name.
-- `repo`: GitHub `owner/repository`.
-- `branch`: source branch, normally `main`.
-- `app_dir`: directory as mounted inside the updater container.
-- `version_file`: version marker in the repository, normally `VERSION`.
-- `compose_file`: Compose file inside the application directory.
-- `compose_service`: service to rebuild/recreate.
-- `health_url`: URL reachable from the updater. With `network_mode: host`, localhost host ports work on Linux/Unraid.
-- `health_version_field`: JSON field returned by the health endpoint containing the running version.
-- `managed_files`: files/directories the updater is allowed to replace and roll back.
-- `preflight`: optional commands run against the downloaded source before installation.
-- `health_timeout_seconds`: optional validation timeout; default 90 seconds.
+For a private repository also configure `github_token_file` and mount that token read-only into the updater container.
 
 ## Important deployment rule
 
-Do not point multiple independently running updater containers at the same app directory. The goal of this project is one shared updater per Docker host.
+Run only **one `ad53-shared-updater` per Docker host**. Do not run the old per-app Docker updater sidecars against the same application directory at the same time.
