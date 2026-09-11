@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py secure_app.py VERSION ./
+COPY app.py secure_app.py verified_app.py VERSION ./
 RUN mkdir -p /config /fallback/work /fallback/personal /fallback/portals
 EXPOSE 8092
-CMD ["uvicorn","secure_app:app","--host","0.0.0.0","--port","8092"]
+CMD ["uvicorn","verified_app:app","--host","0.0.0.0","--port","8092"]
