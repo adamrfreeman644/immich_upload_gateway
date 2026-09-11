@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3 — Album permission fix
+
+- Create **Uploaded though Portal** empty before adding the uploaded asset, avoiding Immich's additional `asset.share` permission requirement.
+- Show an **Uploaded — album failed** warning and the failure type in the portal when Immich accepts the file but album assignment fails.
+
 ## 0.5.2 — Portal upload album
 
 - Automatically add every successful Immich upload to the album `Uploaded though Portal`.
