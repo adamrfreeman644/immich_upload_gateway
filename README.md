@@ -2,7 +2,7 @@
 
 A lightweight self-hosted upload gateway for [Immich](https://immich.app/) that lets other people upload original photos and videos into your Immich library without giving them an Immich account.
 
-**Current version: 0.5.3**
+**Current version: 0.5.4**
 
 The gateway provides multiple independent upload portals, custom domains, QR codes, per-file upload progress and thumbnails, persistent fallback storage, a private admin interface and integration with a reusable shared updater.
 
@@ -110,7 +110,7 @@ docker compose ps
 curl http://YOUR-SERVER-IP:8092/health
 ```
 
-The health response should report `status: ok` and version `0.5.3`.
+The health response should report `status: ok` and version `0.5.4`.
 
 ## 3. Install the shared updater
 
@@ -177,6 +177,8 @@ http://192.168.1.187:8080
 ```
 
 Do not use the public upload portal address here. This must point to the actual Immich server.
+
+Use the final URL directly. If the address redirects from HTTP to HTTPS, configure its `https://` form instead; the gateway deliberately rejects redirects so a proxy redirect cannot be mistaken for a successful upload.
 
 The gateway automatically handles the Immich `/api` path.
 
