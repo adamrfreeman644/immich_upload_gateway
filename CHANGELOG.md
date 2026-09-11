@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.1 — Portal upload album
+## 0.5.2 — Portal upload album
 
 - Automatically add every successful Immich upload to the album `Uploaded though Portal`.
 - Reuse the existing album for the API-key owner or create it on the first successful upload.
