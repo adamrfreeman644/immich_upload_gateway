@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.4 — Redirect safety
+
+- Reject HTTP redirects from Immich instead of falsely reporting them as successful uploads.
+- Move a file to persistent fallback storage when the configured Immich URL redirects.
+- Include the redirect destination and configuration guidance in the upload result.
+- Apply the same strict 2xx validation to album list, create and add operations.
+
 ## 0.5.3 — Album permission fix
 
 - Create **Uploaded though Portal** empty before adding the uploaded asset, avoiding Immich's additional `asset.share` permission requirement.
