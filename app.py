@@ -23,6 +23,7 @@ SESSION_SECRET_FILE=Path('/config/session_secret')
 COOKIE_SECURE=os.getenv('COOKIE_SECURE','false').lower() in ('1','true','yes')
 MAX_FILE_MB=int(os.getenv('MAX_FILE_MB','5000'))
 UPDATER_URL=os.getenv('UPDATER_URL','http://immich-gateway-updater:8093').rstrip('/')
+PORTAL_ALBUM_NAME='Uploaded though Portal'
 ALLOWED={'.jpg','.jpeg','.png','.webp','.heic','.heif','.gif','.tif','.tiff','.dng','.nef','.cr2','.cr3','.arw','.raf','.avif','.mp4','.mov','.m4v','.3gp','.webm','.mkv','.avi'}
 SLUG_RE=re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 
@@ -182,6 +183,27 @@ def move_file(source,destination):
         if exc.errno!=errno.EXDEV:
             raise
         shutil.move(source,destination)
+
+
+async def add_to_portal_album(client,base,headers,asset_id):
+    """Add an uploaded asset to the shared portal album, creating it when needed."""
+    albums_response=await client.get(base+'/albums',headers=headers)
+    albums_response.raise_for_status()
+    albums=albums_response.json()
+    album=next((item for item in albums if item.get('albumName')==PORTAL_ALBUM_NAME),None)
+    if album:
+        add_response=await client.put(
+            base+f"/albums/{album['id']}/assets",
+            headers=headers,
+            json={'ids':[asset_id]},
+        )
+    else:
+        add_response=await client.post(
+            base+'/albums',
+            headers=headers,
+            json={'albumName':PORTAL_ALBUM_NAME,'assetIds':[asset_id]},
+        )
+    add_response.raise_for_status()
 
 
 def portal_public_url(c,slug,p):
@@ -381,7 +403,16 @@ async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=
         if rr.status_code>=400:
             dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich HTTP {rr.status_code}'},status_code=202)
-        return {'status':'uploaded','filename':name}
+        album_warning=''
+        try:
+            asset_id=rr.json().get('id')
+            if not asset_id:
+                raise ValueError('Immich upload response did not include an asset ID')
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30,read=3600,write=3600)) as client:
+                await add_to_portal_album(client,base,headers,asset_id)
+        except (httpx.HTTPError,ValueError,TypeError) as exc:
+            album_warning=f'Uploaded to Immich, but could not add to {PORTAL_ALBUM_NAME}: {exc.__class__.__name__}'
+        return {'status':'uploaded','filename':name,'album':PORTAL_ALBUM_NAME,'album_warning':album_warning}
     finally:
         if tmp and os.path.exists(tmp): os.unlink(tmp)
 
