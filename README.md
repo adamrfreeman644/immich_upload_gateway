@@ -2,7 +2,7 @@
 
 A lightweight self-hosted upload gateway for [Immich](https://immich.app/) that lets other people upload original photos and videos into your Immich library without giving them an Immich account.
 
-**Current version: 0.5.0**
+**Current version: 0.5.1**
 
 The gateway provides multiple independent upload portals, custom domains, QR codes, per-file upload progress and thumbnails, persistent fallback storage, a private admin interface and integration with a reusable shared updater.
 
@@ -22,6 +22,7 @@ If Immich cannot be reached, the gateway saves the original file to persistent f
 - Original image/video upload without recompression
 - Separate Immich API key per portal
 - Uploads appear in the API-key owner's normal Immich library/timeline
+- Successful uploads are automatically collected in **Uploaded though Portal**
 - Custom domain(s) per portal
 - Legacy private token URLs for portals without domains
 - QR-code generation from Admin
@@ -109,7 +110,7 @@ docker compose ps
 curl http://YOUR-SERVER-IP:8092/health
 ```
 
-The health response should report `status: ok` and version `0.5.0`.
+The health response should report `status: ok` and version `0.5.1`.
 
 ## 3. Install the shared updater
 
@@ -272,12 +273,12 @@ You can print/display the QR code for events, customers, family uploads or tempo
 
 The gateway sends accepted files to Immich's asset API using the portal's configured API key. It supplies the original file and its browser-provided modification timestamp and does not recompress the asset.
 
-The Immich account that owns the API key owns the resulting asset. The gateway does **not** create a separate hidden photo stream and does not currently force uploads into an album.
+The Immich account that owns the API key owns the resulting asset. Every successful upload is also added to an album named **Uploaded though Portal** in that account. The gateway reuses that album, or creates it on the first successful upload.
 
 Therefore:
 
 - Same API key on Work + Personal = both feed the same Immich user's Photos timeline.
-- Different API keys = each portal feeds its respective Immich user's library.
+- Different API keys = each portal feeds its respective Immich user's library and each user receives their own **Uploaded though Portal** album.
 
 ## 11. Fallback storage
 
