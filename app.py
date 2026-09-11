@@ -185,10 +185,21 @@ def move_file(source,destination):
         shutil.move(source,destination)
 
 
+def require_immich_success(response):
+    if response.is_redirect:
+        location=response.headers.get('location','unknown destination')
+        raise httpx.HTTPStatusError(
+            f'Immich redirected HTTP {response.status_code} to {location}',
+            request=response.request,
+            response=response,
+        )
+    response.raise_for_status()
+
+
 async def add_to_portal_album(client,base,headers,asset_id):
     """Add an uploaded asset to the shared portal album, creating it when needed."""
     albums_response=await client.get(base+'/albums',headers=headers)
-    albums_response.raise_for_status()
+    require_immich_success(albums_response)
     albums=albums_response.json()
     album=next((item for item in albums if item.get('albumName')==PORTAL_ALBUM_NAME),None)
     if album:
@@ -203,14 +214,14 @@ async def add_to_portal_album(client,base,headers,asset_id):
             headers=headers,
             json={'albumName':PORTAL_ALBUM_NAME},
         )
-        create_response.raise_for_status()
+        require_immich_success(create_response)
         album=create_response.json()
         add_response=await client.put(
             base+f"/albums/{album['id']}/assets",
             headers=headers,
             json={'ids':[asset_id]},
         )
-    add_response.raise_for_status()
+    require_immich_success(add_response)
 
 
 def portal_public_url(c,slug,p):
@@ -407,9 +418,12 @@ async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=
         except httpx.HTTPError as exc:
             dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich connection failed: {exc.__class__.__name__}'},status_code=202)
-        if rr.status_code>=400:
+        if rr.status_code<200 or rr.status_code>=300:
             dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
-            return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich HTTP {rr.status_code}'},status_code=202)
+            reason=f'Immich HTTP {rr.status_code}'
+            if rr.is_redirect:
+                reason+=f" redirect to {rr.headers.get('location','another URL')}; update the configured Immich URL"
+            return JSONResponse({'status':'fallback','filename':dest.name,'reason':reason},status_code=202)
         album_warning=''
         try:
             asset_id=rr.json().get('id')
