@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — Portal upload album
+
+- Automatically add every successful Immich upload to the album `Uploaded though Portal`.
+- Reuse the existing album for the API-key owner or create it on the first successful upload.
+- Keep assets in the owner's normal timeline at their original capture date.
+- Treat album-assignment failure separately so an asset already accepted by Immich is never moved to fallback storage or uploaded twice.
+
 All notable changes to Immich Upload Gateway are recorded here.
 
 ## 0.5.0 — Shared updater architecture
