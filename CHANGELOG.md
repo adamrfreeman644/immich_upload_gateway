@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — Camera popup and local upload queue
+
+- Add a mobile camera popup to public upload portals, styled after the children’s camera with mint shutter, coral camera switch, yellow flash control and zoom slider.
+- Save each captured photo in IndexedDB before starting uploads; restore the portal-specific queue on reopening the same link.
+- Upload sequentially while users continue taking photos, retry automatically with backoff and offer Retry now plus Save copy.
+- Keep camera photos locally on network or Immich failures until Immich returns a confirmed asset ID; regular file-upload fallback behaviour is unchanged.
+- Stop camera tracks on close and provide browser permission, HTTPS, storage and unsupported-control messages.
+
 ## 0.5.4 — Redirect safety
 
 - Reject HTTP redirects from Immich instead of falsely reporting them as successful uploads.
