@@ -522,3 +522,18 @@ curl http://YOUR-SERVER-IP:8092/health
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for release details.
+
+
+## Camera capture and queued uploads (0.6.0)
+
+Public portals include **Open camera**, which opens an in-page camera popup styled after Children’s Camera. Take multiple photos without waiting for each upload. Rear/front switching, zoom and a continuous flash light are available when the browser and camera support them; unavailable controls are disabled. Capture is photo-only.
+
+Each photo is saved to this browser’s IndexedDB before uploading. The queue uploads one photo at a time and automatically retries failures (5–60 second backoff), including after a connection returns. Reopen the **same portal link, on the same device and browser** to resume saved uploads after a reload. The queue is isolated by portal and upload token; changing a link’s token does not send an old queue to a new portal. **Retry now** retries pending photos; **Save copy** downloads a pending photo.
+
+Camera captures stay local until Immich returns an asset ID. If Immich is unavailable, camera uploads retry rather than using the gateway’s server fallback folder. Regular selected-file uploads retain their existing fallback behaviour. Album failures are shown separately after successful delivery.
+
+Use **HTTPS** (or localhost for development) and allow camera access and browser storage. Keep the page open for uploads: mobile browsers may pause work in the background or while the phone is locked. Reload recovery does not mean the entire website opens offline. Do not clear site data or private browsing sessions while photos are pending; browser storage can be removed by the browser/OS, so use Save copy for an additional backup. The page requests persistent storage where supported and pauses capture if saving fails. Full-resolution ImageCapture is used where available, with a JPEG capture from the live preview otherwise.
+
+### Developer checks
+
+Run `python -m pip install -r requirements-dev.txt` and `python -m pytest -q` for server tests. Run `npm ci --ignore-scripts` and `npm test` for the actual camera script in a DOM/IndexedDB harness: offline capture, reload recovery, failure retention, retry, token isolation, two-tab coordination and full-storage recovery. Physical camera quality and browser-specific flash/zoom still need a phone check over HTTPS.

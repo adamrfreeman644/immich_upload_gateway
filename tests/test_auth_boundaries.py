@@ -143,3 +143,68 @@ def test_health_never_exposes_secrets(monkeypatch, tmp_path):
     assert "test-client-secret" not in body
     assert "public-token" not in body
 
+
+
+@pytest.mark.parametrize('result', ['network', 'redirect', 'missing-id', 'uploaded'])
+def test_camera_capture_keeps_local_copy_until_immich_confirmation(monkeypatch, tmp_path, result):
+    legacy, _, client = load_gateway(monkeypatch, tmp_path, auth_enabled=True)
+    calls = []
+
+    class ImmichClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            calls.append(url)
+            if result == 'network':
+                raise legacy.httpx.ConnectError('offline')
+            if result == 'redirect':
+                return legacy.httpx.Response(302, headers={'location': '/login'})
+            return legacy.httpx.Response(201, json={} if result == 'missing-id' else {'id': 'photo-id'})
+
+    async def album(*args):
+        return None
+
+    monkeypatch.setattr(legacy.httpx, 'AsyncClient', ImmichClient)
+    monkeypatch.setattr(legacy, 'add_to_portal_album', album)
+    response = client.post('/api/upload/work?t=public-token',
+                           files={'file': ('camera.jpg', b'photo', 'image/jpeg')},
+                           data={'camera_capture': 'true'})
+    assert len(calls) == 1
+    assert not list((tmp_path / 'fallback').glob('*'))
+    if result == 'uploaded':
+        assert response.status_code == 200
+        assert response.json()['status'] == 'uploaded'
+    else:
+        assert response.status_code in (502, 503)
+        assert 'status' not in response.json()
+
+
+def test_regular_upload_still_uses_server_fallback(monkeypatch, tmp_path):
+    legacy, _, client = load_gateway(monkeypatch, tmp_path, auth_enabled=False)
+
+    class OfflineClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, *args, **kwargs):
+            raise legacy.httpx.ConnectError('offline')
+
+    monkeypatch.setattr(legacy.httpx, 'AsyncClient', OfflineClient)
+    response = client.post('/api/upload/work?t=public-token',
+                           files={'file': ('selected.jpg', b'photo', 'image/jpeg')})
+    assert response.status_code == 202
+    assert response.json()['status'] == 'fallback'
+    assert (tmp_path / 'fallback' / 'selected.jpg').read_bytes() == b'photo'

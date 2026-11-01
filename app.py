@@ -233,6 +233,233 @@ def portal_public_url(c,slug,p):
 BASE='''*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f3f4f6;color:#111827}.wrap{width:min(92vw,680px);margin:auto;padding:7vh 0}.card{background:#fff;padding:28px;box-shadow:0 14px 40px #0002}h1{margin:0 0 7px}.muted{color:#6b7280}input[type=file]{width:100%;padding:20px;border:2px dashed #9ca3af;background:#fafafa}.btn{width:100%;border:0;padding:15px;margin-top:14px;font-weight:800;color:white;cursor:pointer}.btn:disabled{cursor:not-allowed;opacity:.6}.status{white-space:pre-wrap;margin-top:13px;font-weight:700}.ok{color:#15803d}.warn{color:#b45309}.bad{color:#b91c1c}.file-list{display:grid;gap:10px;margin-top:16px}.file-row{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;padding:12px;border:1px solid #d1d5db;border-radius:10px;background:#fff}.file-thumb{width:58px;height:58px;border-radius:8px;object-fit:cover;background:#e5e7eb;display:block}.file-thumb-placeholder{width:58px;height:58px;border-radius:8px;background:#e5e7eb;display:grid;place-items:center;font-size:1.4rem}.file-body{min-width:0}.file-head{display:flex;align-items:flex-start;gap:10px}.file-name{min-width:0;flex:1;font-weight:700;overflow-wrap:anywhere}.file-state{flex:none;font-size:.82rem;font-weight:800}.file-progress{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:9px}.file-fill{height:100%;width:0;transition:width .15s ease}.file-reason{display:none;margin:8px 0 0;font-size:.85rem;overflow-wrap:anywhere}.retry{display:none;border:0;border-radius:7px;padding:7px 11px;margin-top:9px;font-weight:800;color:#fff;background:#b91c1c;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#0b1017;color:#f8fafc}.card{background:#141b25}.muted{color:#9ca3af}input[type=file]{background:#0d141e;color:#fff;border-color:#475569}.file-row{background:#0d141e;border-color:#334155}.file-thumb,.file-thumb-placeholder,.file-progress{background:#334155}}'''
 
 
+CAMERA_HTML = r'''
+<button type="button" id="open-camera" class="btn camera-launch">📷 Open camera</button>
+<section class="camera-queue" aria-label="Camera uploads">
+  <div class="queue-heading"><strong>Camera uploads</strong><button type="button" id="camera-retry">Retry now</button></div>
+  <p id="camera-queue-status" role="status">Preparing local photo storage…</p>
+  <div id="camera-queue-list"></div>
+  <p class="muted camera-help">Photos stay on this device until Immich confirms upload. Keep this page open for uploads; reopen the same link to resume.</p>
+</section>
+<dialog id="camera-dialog" aria-label="Camera">
+  <div class="camera-view">
+    <video id="camera-video" autoplay muted playsinline></video>
+    <div class="camera-top"><button type="button" id="camera-flash" class="camera-round yellow" aria-label="Flash unavailable" disabled>ϟ</button><span class="photo-mode">▣ Photo</span><button type="button" id="camera-close" class="camera-round yellow" aria-label="Close camera">✕</button></div>
+    <p id="camera-message" role="status"></p>
+    <div class="camera-bottom">
+      <div class="camera-zoom"><output id="camera-zoom-label">1.0×</output><input id="camera-zoom" type="range" min="1" max="1" step="0.1" value="1" aria-label="Camera zoom" disabled></div>
+      <div class="camera-controls"><a id="camera-last" class="camera-round blue" aria-label="Download last photo" hidden>▧</a><button type="button" id="camera-shutter" class="camera-round mint" aria-label="Take photo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20zM12 5a7 7 0 1 1 0 14a7 7 0 1 1 0-14zM12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z"/></svg></button><button type="button" id="camera-switch" class="camera-round coral" aria-label="Switch front or rear camera"><svg viewBox="0 0 32 32" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M5 7C10 1 22 1 27 7M27 25C22 31 10 31 5 25"/><path fill="currentColor" fill-rule="evenodd" d="M23 7l6 2-1-6zM9 25l-6-2 1 6zM7 11h5l2-3h5l2 3h4v12H7zM20 17a4 4 0 1 0-8 0a4 4 0 1 0 8 0"/></svg></button></div>
+      <p id="camera-count" role="status">Ready</p>
+    </div>
+  </div>
+</dialog>
+'''
+
+CAMERA_CSS = r'''
+.camera-launch{border-radius:16px;background:#bdebd5!important;color:#193c40!important;margin-top:0;margin-bottom:14px;font-size:1rem;min-height:52px}.camera-queue{margin-top:20px;border-top:1px solid #94a3b855;padding-top:16px}.queue-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.queue-heading button,.camera-download{border:0;border-radius:10px;padding:10px;background:#bdebd5;color:#193c40;font-weight:700;text-decoration:none}.camera-help{font-size:.8rem;line-height:1.5}.camera-pending{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #94a3b833}.camera-pending span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:.85rem}.camera-pending small{display:block;margin-top:4px}.camera-download{white-space:nowrap;font-size:.8rem}#camera-dialog{padding:0;border:0;border-radius:28px;width:min(96vw,600px);max-width:100vw;height:min(92dvh,850px);max-height:100dvh;background:#edf8fa;color:#193c40;overflow:hidden}#camera-dialog::backdrop{background:#08181dd9}.camera-view{position:relative;width:100%;height:100%;background:#193c40;isolation:isolate}#camera-video{width:100%;height:100%;object-fit:contain;background:#0b1718}.camera-top{position:absolute;top:max(16px,env(safe-area-inset-top));left:16px;right:16px;display:flex;align-items:center;justify-content:space-between;gap:8px}.camera-round{border:0;display:grid;place-items:center;flex:none;border-radius:50%;width:58px;height:58px;color:#193c40;font-size:28px;font-weight:800;cursor:pointer;text-decoration:none;box-shadow:0 3px 14px #0002;touch-action:manipulation}.camera-round:disabled{opacity:.45;cursor:default}.camera-round[hidden]{visibility:hidden;display:grid}.yellow{background:#ffd36f}.mint{background:#bdebd5}.coral{background:#ffac9d}.blue{background:#99dce9}.photo-mode{border-radius:30px;background:#edf8faf2;padding:12px 22px;font-weight:800}.camera-bottom{position:absolute;bottom:max(8px,env(safe-area-inset-bottom));left:16px;right:16px;display:grid;gap:16px;justify-items:center}.camera-zoom{display:flex;align-items:center;gap:14px;width:min(100%,380px);padding:10px 16px 10px 8px;background:#edf8faee;border-radius:32px}.camera-zoom output{display:grid;place-items:center;border-radius:24px;background:#bdebd5;min-width:64px;height:44px;font-weight:800}.camera-zoom input{min-width:0;width:100%;accent-color:#1b845f;height:32px}.camera-controls{display:flex;align-items:center;justify-content:space-between;width:min(100%,350px);gap:24px}#camera-shutter{width:90px;height:90px}.camera-round svg{width:32px;height:32px}#camera-shutter svg{width:58px;height:58px}#camera-last img{width:100%;height:100%;object-fit:cover;border-radius:50%}#camera-count{margin:0;color:white;background:#193c40df;border-radius:16px;padding:6px 14px;font-size:.8rem;text-align:center}#camera-message{position:absolute;top:100px;left:16px;right:16px;text-align:center;background:#193c40e6;color:white;border-radius:18px;padding:12px;line-height:1.5;margin:0}#camera-message:empty{display:none}@media(max-width:520px){#camera-dialog{width:100vw;height:100dvh;border-radius:0;max-height:100dvh}.camera-top{left:12px;right:12px}.camera-round{width:54px;height:54px}}@media(orientation:landscape) and (max-height:600px){#camera-dialog{width:100vw;height:100dvh;border-radius:0}.camera-top{right:150px}.camera-bottom{left:auto;right:16px;top:16px;bottom:16px;width:120px;display:flex;flex-direction:column;justify-content:center;gap:8px}.camera-controls{flex-direction:column;gap:12px}.camera-zoom{position:absolute;right:144px;bottom:0;width:min(48vw,350px)}#camera-message{right:155px}.camera-round{width:48px;height:48px}#camera-shutter{width:76px;height:76px}.camera-controls{width:auto}#camera-count{font-size:.7rem}}
+'''
+
+CAMERA_JS = r'''
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const dialog = $('camera-dialog'), video = $('camera-video'), shutter = $('camera-shutter');
+const message = $('camera-message'), queueStatus = $('camera-queue-status');
+const owner = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+let db, scope, stream, opening = false, generation = 0, capturing = false, worker = false;
+let facing = 'environment', torch = false, lastUrl, queueUrls = [], storageFailed = false;
+const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+async function transaction(mode, action) {
+  const tx = db.transaction('photos', mode), store = tx.objectStore('photos');
+  const done = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error || new Error('Local photo storage failed')); });
+  try { const result = await action(store); await done; return result; }
+  catch (error) { await done.catch(() => {}); throw error; }
+}
+async function records() {
+  return transaction('readonly', store => request(store.index('scope').getAll(scope)));
+}
+function storageError() {
+  storageFailed = true; shutter.disabled = true;
+  message.textContent = 'Local storage is unavailable or full. Download your last photo before leaving. Free space, then reopen this page.';
+  queueStatus.textContent = 'Could not save photos locally. Camera capture is paused to protect your photos.';
+}
+async function refreshQueue() {
+  const rows = (await records()).sort((a,b) => a.created - b.created);
+  for (const url of queueUrls) URL.revokeObjectURL(url);
+  queueUrls = []; $('camera-queue-list').replaceChildren();
+  for (const row of rows) {
+    const el = document.createElement('div'); el.className = 'camera-pending';
+    const label = document.createElement('span'); label.textContent = row.name;
+    const detail = document.createElement('small');
+    detail.textContent = row.error || (row.leaseUntil > Date.now() ? 'Uploading…' : 'Saved on this device · waiting to upload');
+    label.append(detail);
+    const link = document.createElement('a'); link.className = 'camera-download'; link.textContent = 'Save copy'; link.download = row.name;
+    link.href = URL.createObjectURL(row.blob); queueUrls.push(link.href); el.append(label,link); $('camera-queue-list').append(el);
+  }
+  const text = rows.length ? `${rows.length} photo${rows.length === 1 ? '' : 's'} saved locally · ${navigator.onLine ? 'uploading automatically' : 'waiting for internet'}` : 'All camera photos uploaded.';
+  queueStatus.textContent = text; $('camera-count').textContent = rows.length ? `${rows.length} waiting to upload` : 'Ready · uploads complete';
+  $('camera-retry').disabled = !rows.length;
+}
+async function claim() {
+  // The read and write share a transaction, so two tabs cannot claim the same photo.
+  return transaction('readwrite', async store => {
+    const rows = await request(store.index('scope').getAll(scope));
+    const row = rows.sort((a,b) => a.created-b.created).find(x => (x.nextAttempt || 0) <= Date.now() && (x.leaseUntil || 0) <= Date.now());
+    if (!row) return null;
+    row.leaseUntil = Date.now()+180000; row.owner = owner; row.error = '';
+    await request(store.put(row)); return row;
+  });
+}
+function sendPhoto(row) {
+  return new Promise(resolve => {
+    const xhr = new XMLHttpRequest(), data = new FormData();
+    data.append('file', row.blob, row.name); data.append('last_modified',new Date(row.created).toISOString());
+    data.append('camera_capture','true');
+    xhr.open('POST', `/api/upload/${encodeURIComponent(slug)}?t=${encodeURIComponent(tok)}`);
+    xhr.timeout = 120000;
+    xhr.upload.onprogress = event => { if(event.lengthComputable) $('camera-count').textContent = `Uploading ${Math.round(event.loaded/event.total*100)}% · you can keep taking photos`; };
+    xhr.onload = () => {
+      let result; try { result = JSON.parse(xhr.responseText); } catch (_) {}
+      if (xhr.status >= 200 && xhr.status < 300 && result && result.status === 'uploaded') resolve({ok:true,warning:result.album_warning});
+      else resolve({ok:false,error:result && (result.reason || result.detail) || `Upload failed (HTTP ${xhr.status}). Will retry.`});
+    };
+    xhr.onerror = xhr.ontimeout = xhr.onabort = () => resolve({ok:false,error:'Connection interrupted. Photo saved locally; will retry.'});
+    xhr.send(data);
+  });
+}
+async function pump() {
+  if (!db || worker || !navigator.onLine) return;
+  worker = true;
+  try {
+    while(navigator.onLine) {
+      const row = await claim(); if(!row) break;
+      await refreshQueue();
+      const result = await sendPhoto(row);
+      await transaction('readwrite', async store => {
+        const current = await request(store.get(row.id));
+        if (!current || current.owner !== owner) return;
+        if (result.ok) await request(store.delete(row.id));
+        else {
+          current.attempts = (current.attempts || 0)+1;
+          current.nextAttempt = Date.now()+Math.min(60000,5000*Math.pow(2,Math.min(current.attempts-1,4)));
+          current.error = String(result.error); current.leaseUntil = 0;
+          await request(store.put(current));
+        }
+      });
+      if(result.warning) message.textContent = result.warning;
+      await refreshQueue();
+      // Continue through other photos even if one needs a retry.
+    }
+  } catch (_) { storageError(); }
+  finally { worker = false; }
+}
+async function initialise() {
+  try {
+    if (!window.isSecureContext || !window.indexedDB || !crypto.subtle) throw new Error('Secure storage required');
+    const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(slug+'\0'+tok));
+    scope = [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2,'0')).join('');
+    db = await new Promise((resolve,reject) => {
+      const open = indexedDB.open('immich-camera-queue',1);
+      open.onupgradeneeded = () => { const store = open.result.createObjectStore('photos',{keyPath:'id'}); store.createIndex('scope','scope'); };
+      open.onsuccess = () => resolve(open.result); open.onerror = open.onblocked = () => reject(open.error);
+    });
+    db.onversionchange = () => { db.close(); storageError(); };
+    await refreshQueue(); await pump();
+  } catch (_) {
+    $('open-camera').disabled = true;
+    queueStatus.textContent = 'Camera needs HTTPS and browser storage. Open the secure upload link and allow storage; file uploads still work below.';
+  }
+}
+function stopCamera() {
+  generation++; opening = false;
+  if(stream) for(const track of stream.getTracks()) track.stop();
+  stream = null; video.srcObject = null; shutter.disabled = true; torch = false;
+}
+async function startCamera() {
+  stopCamera(); const current = generation; opening = true;
+  $('camera-switch').disabled = true;
+  message.textContent = 'Opening camera…';
+  try {
+    const next = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1440}},audio:false});
+    if(current !== generation || !dialog.open) { next.getTracks().forEach(t => t.stop()); return; }
+    stream = next; video.srcObject = stream; await video.play();
+    if(current !== generation || !dialog.open) return;
+    const track = stream.getVideoTracks()[0], caps = track.getCapabilities ? track.getCapabilities() : {};
+    const zoom = $('camera-zoom'); zoom.disabled = !caps.zoom; zoom.min = caps.zoom ? caps.zoom.min : 1; zoom.max = caps.zoom ? caps.zoom.max : 1;
+    zoom.step = caps.zoom ? caps.zoom.step || .1 : .1; zoom.value = track.getSettings().zoom || 1;
+    $('camera-zoom-label').textContent = `${Number(zoom.value).toFixed(1)}×`;
+    const flash = $('camera-flash'); flash.disabled = !caps.torch; flash.setAttribute('aria-label',caps.torch ? 'Turn flash light on' : 'Flash unavailable in this browser'); flash.textContent = 'ϟ';
+    video.style.transform = facing === 'user' ? 'scaleX(-1)' : '';
+    message.textContent = ''; shutter.disabled = storageFailed || capturing;
+    track.onended = () => { shutter.disabled = true; message.textContent = 'Camera stopped. Close and reopen the camera to continue.'; };
+  } catch(error) {
+    if(current === generation && dialog.open) message.textContent = error.name === 'NotAllowedError' ? 'Allow camera access in your browser, then close and reopen the camera.' : 'Could not open the camera. Check camera permissions and close other camera apps.';
+  } finally { if(current === generation) { opening = false; $('camera-switch').disabled = false; } }
+}
+$('open-camera').onclick = async () => {
+  if(!db) return;
+  dialog.showModal(); document.body.style.overflow = 'hidden';
+  if(!storageFailed) await startCamera();
+};
+dialog.addEventListener('close', () => { stopCamera(); document.body.style.overflow = ''; $('open-camera').focus(); });
+$('camera-close').onclick = () => dialog.close();
+$('camera-switch').onclick = async () => { if(opening || capturing) return; facing = facing === 'environment' ? 'user' : 'environment'; await startCamera(); };
+$('camera-zoom').oninput = async event => {
+  const track = stream && stream.getVideoTracks()[0]; if(!track) return;
+  try { await track.applyConstraints({advanced:[{zoom:Number(event.target.value)}]}); $('camera-zoom-label').textContent = `${Number(track.getSettings().zoom || 1).toFixed(1)}×`; }
+  catch(_) { message.textContent = 'Zoom is unavailable on this camera.'; }
+};
+$('camera-flash').onclick = async () => {
+  const track = stream && stream.getVideoTracks()[0]; if(!track) return;
+  try { const next = !torch; await track.applyConstraints({advanced:[{torch:next}]}); torch = next; $('camera-flash').textContent = torch ? 'ϟ On' : 'ϟ'; $('camera-flash').setAttribute('aria-label',torch ? 'Turn flash light off' : 'Turn flash light on'); }
+  catch(_) { message.textContent = 'Flash light is unavailable on this camera.'; }
+};
+async function captureBlob(track) {
+  if(typeof ImageCapture !== 'undefined') {
+    try { const blob = await new ImageCapture(track).takePhoto(); if(blob && blob.size) return blob; } catch(_) { /* Browser fallback below. */ }
+  }
+  if(!video.videoWidth || !video.videoHeight) throw new Error('Camera is not ready yet.');
+  const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  return new Promise((resolve,reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not capture photo.')),'image/jpeg',.95));
+}
+shutter.onclick = async () => {
+  if(capturing || !stream || storageFailed) return;
+  capturing = true; shutter.disabled = true; $('camera-switch').disabled = true;
+  try {
+    const created = Date.now(), blob = await captureBlob(stream.getVideoTracks()[0]);
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${created}-${Math.random().toString(16).slice(2)}`;
+    const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+    const row = {id,scope,created,blob,name:`Camera-${new Date(created).toISOString().replace(/[:.]/g,'-')}-${id.slice(-8)}.${ext}`,attempts:0,nextAttempt:0,leaseUntil:0};
+    if(lastUrl) URL.revokeObjectURL(lastUrl); lastUrl = URL.createObjectURL(blob);
+    const last = $('camera-last'); last.href = lastUrl; last.download = row.name; last.hidden = false;
+    const img = document.createElement('img'); img.src = lastUrl; img.alt = 'Last photo'; last.replaceChildren(img);
+    try { await transaction('readwrite', store => request(store.add(row))); }
+    catch(_) { storageError(); return; }
+    message.textContent = 'Photo saved on this device. Keep taking photos while it uploads.';
+    if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    await refreshQueue(); void pump();
+  } catch(error) { message.textContent = error.message || 'Could not capture photo. Try again.'; }
+  finally { capturing = false; shutter.disabled = !stream || storageFailed; $('camera-switch').disabled = !stream; }
+};
+$('camera-retry').onclick = async () => {
+  try {
+    await transaction('readwrite', async store => {
+      for(const row of await request(store.index('scope').getAll(scope))) { row.nextAttempt = 0; await request(store.put(row)); }
+    });
+    await refreshQueue(); void pump();
+  } catch(_) { storageError(); }
+};
+window.addEventListener('online', () => { if(db) { void refreshQueue().catch(storageError); void pump(); } });
+window.addEventListener('offline', () => { if(db) void refreshQueue().catch(storageError); });
+document.addEventListener('visibilitychange', () => { if(!document.hidden) { void pump(); if(dialog.open && !stream && !opening) void startCamera(); } });
+window.addEventListener('pagehide',stopCamera);
+setInterval(() => { void pump(); },5000);
+void initialise();
+})();
+'''
+
+
 def portal_page(slug,p):
     friendly=p.get('design')=='friendly'; accent=p.get('accent','#7c3aed')
     name=html.escape(str(p.get('name','Upload')))
@@ -240,7 +467,7 @@ def portal_page(slug,p):
     extra='.card{border-radius:28px}.box{border-radius:22px;padding:20px;background:#f8fafc}' if friendly else '.card{border-radius:8px}.box{border:1px solid #d1d5db;padding:20px}'
     if friendly:
         extra+='body{background:linear-gradient(150deg,#fff7ed,#f5f3ff,#eff6ff)}@media(prefers-color-scheme:dark){body{background:linear-gradient(150deg,#201611,#171426,#0d1726)}.box{background:#101722}}'
-    return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="{accent}"><title>{name}</title><style>{BASE}{extra}.btn,.file-fill{{background:{accent}}}</style></head><body><main class="wrap"><section class="card"><h1>{name}</h1><p class="muted">{subtitle}</p><div class="box"><input id="f" type="file" multiple accept="image/*,video/*,.dng,.nef,.cr2,.cr3,.arw,.raf,.mkv,.avi"><button id="b" class="btn">Upload files</button><div id="files" class="file-list" aria-live="polite"></div><div id="s" class="status" aria-live="polite"></div></div><p class="muted" style="font-size:.85rem">Original files are uploaded without recompression.</p></section></main><script>
+    return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="{accent}"><title>{name}</title><style>{BASE}{extra}{CAMERA_CSS}.btn,.file-fill{{background:{accent}}}</style></head><body><main class="wrap"><section class="card"><h1>{name}</h1><p class="muted">{subtitle}</p><div class="box">{CAMERA_HTML}<input id="f" type="file" multiple accept="image/*,video/*,.dng,.nef,.cr2,.cr3,.arw,.raf,.mkv,.avi"><button id="b" class="btn">Upload files</button><div id="files" class="file-list" aria-live="polite"></div><div id="s" class="status" aria-live="polite"></div></div><p class="muted" style="font-size:.85rem">Original files are uploaded without recompression.</p></section></main><script>
 const slug={json.dumps(slug)},tok={json.dumps(p.get('upload_token',''))};const f=document.getElementById('f'),b=document.getElementById('b'),s=document.getElementById('s'),files=document.getElementById('files');let items=[],running=false;
 function size(n){{if(n<1024)return `${{n}} B`;if(n<1048576)return `${{(n/1024).toFixed(1)}} KB`;return `${{(n/1048576).toFixed(1)}} MB`}}
 function setItem(item,state,label,percent,reason=''){{item.status=state;item.state.textContent=label;item.state.className='file-state '+(state==='uploaded'?'ok':state==='fallback'?'warn':state==='failed'?'bad':'');item.fill.style.width=`${{percent}}%`;item.reason.textContent=reason;item.reason.style.display=reason?'block':'none';item.reason.className='file-reason '+(state==='failed'?'bad':'warn');item.retry.style.display=state==='failed'?'inline-block':'none';item.retry.disabled=false}}
@@ -251,7 +478,7 @@ function errorReason(xhr,data){{if(data&&typeof data==='object')return data.reas
 function uploadOne(item){{return new Promise(resolve=>{{setItem(item,'uploading','Uploading',0);let fd=new FormData();fd.append('file',item.file,item.file.name);fd.append('last_modified',new Date(item.file.lastModified).toISOString());let xhr=new XMLHttpRequest();xhr.open('POST',`/api/upload/${{slug}}?t=${{encodeURIComponent(tok)}}`);xhr.upload.onprogress=e=>{{if(e.lengthComputable){{let p=Math.min(99,Math.round(e.loaded/e.total*100));item.fill.style.width=`${{p}}%`;item.state.textContent=`${{p}}%`}}}};xhr.onload=()=>{{let data=null;try{{data=JSON.parse(xhr.responseText)}}catch(_){{}}if(xhr.status>=200&&xhr.status<300&&data&&data.status==='uploaded')setItem(item,'uploaded',data.album_warning?'Uploaded — album failed':'Uploaded',100,data.album_warning||'');else if(xhr.status>=200&&xhr.status<300&&data&&data.status==='fallback')setItem(item,'fallback','Saved safely',100,data.reason||'Immich was unavailable, so this file was saved to fallback storage.');else setItem(item,'failed','Failed',100,errorReason(xhr,data));resolve()}};xhr.onerror=()=>{{setItem(item,'failed','Failed',100,'Network error. Check your connection and try again.');resolve()}};xhr.onabort=()=>{{setItem(item,'failed','Failed',100,'Upload was cancelled.');resolve()}};xhr.send(fd)}})}}
 function summary(){{let uploaded=items.filter(x=>x.status==='uploaded').length,fallback=items.filter(x=>x.status==='fallback').length,failed=items.filter(x=>x.status==='failed').length,waiting=items.filter(x=>x.status==='waiting'||x.status==='uploading').length;if(waiting){{s.textContent=`Uploading files… ${{uploaded+fallback+failed}} of ${{items.length}} complete`;s.className='status';return}}s.textContent=`Complete: ${{uploaded}} uploaded to Immich`+(fallback?`, ${{fallback}} saved to fallback`:'')+(failed?`, ${{failed}} failed`:'');s.className='status '+(failed?'bad':fallback?'warn':'ok')}}
 f.addEventListener('change',renderFiles);b.onclick=async()=>{{if(running)return;if(!items.length){{s.textContent='Choose at least one file.';s.className='status bad';return}}running=true;b.disabled=true;f.disabled=true;for(const item of items){{if(item.status==='waiting'||item.status==='failed'){{await uploadOne(item);summary()}}}}running=false;b.disabled=false;f.disabled=false;summary();if(!items.some(x=>x.status==='failed'))f.value=''}};
-</script></body></html>'''
+</script><script>{CAMERA_JS}</script></body></html>'''
 
 ACSS='''*{box-sizing:border-box}body{margin:0;background:#0b1017;color:#e5e7eb;font-family:system-ui}.shell{max-width:1100px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}.panel{background:#121a25;border:1px solid #273244;border-radius:15px;padding:20px}.full{grid-column:1/-1}label{display:block;margin:11px 0 5px;color:#cbd5e1;font-size:.85rem}input,select,textarea{width:100%;padding:10px;background:#0b111a;color:white;border:1px solid #334155;border-radius:9px}button,.button{display:inline-block;border:0;border-radius:9px;padding:11px 14px;font-weight:800;cursor:pointer;background:#e5e7eb;color:#111827;text-decoration:none}.muted{color:#94a3b8}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ok{color:#86efac}.bad{color:#fca5a5}.warn{color:#fde68a}.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.top h1{margin-right:auto}.danger{background:#991b1b;color:white}.primary{background:#2563eb;color:white}.code{font-family:ui-monospace,monospace;white-space:pre-wrap;background:#080c12;padding:12px;border-radius:9px;max-height:340px;overflow:auto}@media(max-width:760px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}'''
 
@@ -393,7 +620,7 @@ def admin_updates_install(r:Request):
         return JSONResponse({'ok':False,'message':f'Updater unavailable: {exc}'},status_code=503)
 
 @app.post('/api/upload/{slug}')
-async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=Form(''),t:str=''):
+async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=Form(''),t:str='',camera_capture:bool=Form(False)):
     c,p=get_portal(slug,t,host_without_port(r)); key=p.get('api_key','').strip()
     if not key: raise HTTPException(503,'No API key configured for this portal')
     name=Path(file.filename or 'upload.bin').name; ext=Path(name).suffix.lower(); tmp=None; size=0
@@ -416,14 +643,24 @@ async def upload(slug:str,r:Request,file:UploadFile=File(...),last_modified:str=
                 with open(tmp,'rb') as h:
                     rr=await client.post(base+'/assets',headers=headers,data=data,files={'assetData':(name,h,file.content_type or 'application/octet-stream')})
         except httpx.HTTPError as exc:
+            if camera_capture:
+                raise HTTPException(503,'Immich is unavailable. Photo remains on your device and will retry.') from exc
             dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':f'Immich connection failed: {exc.__class__.__name__}'},status_code=202)
         if rr.status_code<200 or rr.status_code>=300:
+            if camera_capture:
+                raise HTTPException(503,f'Immich HTTP {rr.status_code}. Photo remains on your device and will retry.')
             dest=unique(p['fallback_dir'],name); move_file(tmp,dest); tmp=None
             reason=f'Immich HTTP {rr.status_code}'
             if rr.is_redirect:
                 reason+=f" redirect to {rr.headers.get('location','another URL')}; update the configured Immich URL"
             return JSONResponse({'status':'fallback','filename':dest.name,'reason':reason},status_code=202)
+        if camera_capture:
+            try:
+                if not rr.json().get('id'):
+                    raise ValueError('Missing asset ID')
+            except (ValueError, AttributeError) as exc:
+                raise HTTPException(502,'Immich did not confirm the photo. Keeping the local copy for retry.') from exc
         album_warning=''
         try:
             asset_id=rr.json().get('id')

@@ -1,0 +1,12 @@
+{
+  "name": "immich_upload_gateway",
+  "description": "A lightweight self-hosted upload gateway for [Immich](https://immich.app/) that lets other people upload original photos and videos into your Immich library without giving them an Immich account.",
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.4",
+    "jsdom": "^26.1.0"
+  },
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/camera-queue.test.cjs"
+  }
+}
